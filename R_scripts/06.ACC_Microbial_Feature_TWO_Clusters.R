@@ -195,10 +195,10 @@ function_ex_sur <- function(in_matrix){
       # survival plot
       fit <- survfit(Surv(OS_MONTHS, CENSOR) ~ class, data = df_meta_ACC_m)
       
-      p <- ggsurvplot(fit, # 创建的拟合对象
-                      data = df_meta_ACC_m,  # 指定变量数据来源
-                      conf.int = TRUE, # 显示置信区间
-                      pval = TRUE, # 添加P值
+      p <- ggsurvplot(fit,
+                      data = df_meta_ACC_m,
+                      conf.int = TRUE,
+                      pval = TRUE,
                       palette = c("#0072B5CC","#E18727CC"),
                       xlab = "Time (Monthes)", 
                       legend = "right",
