@@ -2,64 +2,6 @@ rm(list = ls())
 getwd()
 load('step00_output.Rdata')
 
-
-# K-M Curve ---------------------------------------------------------------
-# {library(ggpubr)
-#   library(ggplot2)
-#   library(survival)
-#   library(survminer)}
-# 
-#OS
-# fit1 <- survfit( Surv(OS.time, OS) ~ Without_combined, data = clinic)
-# fit1
-# ggsurvplot(fit1,
-#            pval = T,
-#            conf.int = T,
-#            pval.method = T,
-#            title='Overall survival')
-
-# #DFS
-# clinic$DFS_STATUS <- as.numeric(substr(clinic$DFS_STATUS,1,1))
-# clinic$DFS_MONTHS <- as.numeric(clinic$DFS_MONTHS)
-# fit2 <- survfit( Surv(DFS_MONTHS, DFS_STATUS ) ~ kmeans, data = clinic) 
-# fit2
-# ggsurvplot(fit2,
-#            pval = T,
-#            conf.int = T,
-#            pval.method = T,
-#            title='Disease Free Survival')
-# 
-# #PFS
-# fit3 <- survfit( Surv(PFS.time, PFS ) ~ kmeans, data = clinic) 
-# fit3
-# ggsurvplot(fit3,
-#            pval = T,
-#            pval.method = T,
-#            title='Progression Free Survival')
-# 
-# #DSS
-# fit4 <- survfit( Surv(DSS.time, DSS ) ~ kmeans, data = clinic) 
-# fit4
-# ggsurvplot(fit4,
-#            pval = T,
-#            pval.method = T,
-#            title='Disease Specific Survival')
-# 
-# #PFI
-# fit5 <- survfit( Surv(PFI.time, PFI ) ~ kmeans, data = clinic) 
-# fit5
-# ggsurvplot(fit5,
-#            pval = T,
-#            pval.method = T)
-# 
-# #DFI
-# fit6 <- survfit( Surv(DFI.time, DFI ) ~ kmeans, data = clinic) 
-# fit6
-# ggsurvplot(fit6,
-#            pval = T,
-#            pval.method = T)
-
-
 # Clinical parameters & MS ------------------------------------------------
 {
   library(stringr)
@@ -143,6 +85,7 @@ for (i in 1:length(variable)) {
 result[result<0.05] <- '*'
 write.table(result,file = './01clinical_analysis/output_ACC_params_MS(chi-squared test).tsv',sep = '\t',row.names = T,col.names = NA)
 
+
 # Multivariate COX --------------------------------------------------------
 
 {
@@ -165,18 +108,10 @@ res.cox.all <- coxph(formula = Surv(OS.time,OS)~
                        PRIMARY_THERAPY_OUTCOME,
                        data = clinic)
 x <- summary(res.cox.all)
-x
 result_cox <- data.frame(HR=signif(x$conf.int[,1],digits=2),
                          HR.confit.lower=signif(x$conf.int[,"lower .95"],2),
                          HR.confit.upper=signif(x$conf.int[,"upper .95"],2),
                          p.value =signif(x$coefficients[,"Pr(>|z|)"],digits = 3))
-# result_cox <- result_cox %>%
-#   mutate('HR(95%CI)'=paste(.$HR,"(",result_cox$HR.confit.lower,"-",.$HR.confit.upper,")",sep = "")) %>%
-#   dplyr::mutate(p.value=as.numeric(.$p.value)) %>% 
-#   dplyr::mutate(p.value= ifelse(.$p.value<0.001,'***',ifelse(.$p.value<0.01,'**',ifelse(.$p.value<0.05,'*','NS'))))%>% 
-#   tibble::rownames_to_column(var = 'Parameter') %>%
-#   rbind(c("Parameter",NA,NA,NA,"P.value","HR(95%CI)"),.)
-
 result_cox <- result_cox %>%
   mutate('HR(95%CI)'=paste(.$HR,"(",result_cox$HR.confit.lower,"-",.$HR.confit.upper,")",sep = "")) %>%
   dplyr::mutate(p.value=as.numeric(.$p.value)) %>%
@@ -186,33 +121,7 @@ result_cox[,2:4] <- lapply(result_cox[,2:4],as.numeric)
 result <- rbind(result,result_cox)
 write.table(result,file = './01clinical_analysis/ouput_multicox_result.tsv',sep = '\t',row.names = T,col.names = NA)
 
-#Forestplot
-# library(forestplot)
-# forestplot(result_cox[,c(1,5,6)], #告诉函数，合成的表格result的第1，5，6列还是显示数字
-#            mean=result_cox[,2],   #告诉函数，表格第3列为HR，它要变成森林图的小方块
-#            lower=result_cox[,3],  #告诉函数表格第6列为5%CI，
-#            upper=result_cox[,4],  #表格第7列为95%CI，它俩要化作线段，穿过方块
-#            zero=1,            #告诉函数，零线或参考线为HR=1即x轴的垂直线
-#            boxsize=0.4,       #设置小黑块的大小
-#            graphwidth = unit(0.2,"npc"),
-#            hrzl_lines=list("1" = gpar(lty=1,lwd=2),
-#                            "2" = gpar(lty=2),
-#                            '11'= gpar(lwd=2,lty=1)),
-#            xlab="HR (95% CI)",
-#            ci.vertices = 1,
-#            xticks=c(1,15,30) ,
-#            lineheight=unit(10, 'mm'),
-#            line.margin=unit(5, 'mm'),
-#            colgap=unit(5, 'mm'),
-#            col=fpColors(zero = "gray",
-#                         box = '#104E8B',
-#                         lines = '#104E8B'),
-#            # title = "Multivariate cox regression analysis",
-#            graph.pos=2)       #森林图应插在图形第2列
 
-
-library(grid)
-library(forestploter)
 dat <- read.table(file = './01clinical_analysis/ouput_multicox_result.tsv',sep = '\t',header = T)
 dat$` ` <- paste(rep(" ", nrow(dat)), collapse = " ")
 dat$Parameter <- ifelse(is.na(dat$HR), 
@@ -220,30 +129,7 @@ dat$Parameter <- ifelse(is.na(dat$HR),
                       paste0("   ", dat$Parameter))
 dat <- dat[,c(1,7,2:6)]
 
-tm <- forest_theme(base_size = 15,  #文本的大小
-                   # Confidence interval point shape, line type/color/width
-                   # ci_pch = 15,   #可信区间点的形状
-                   # ci_col = "#762a83",    #CI的颜色
-                   # ci_fill = "blue",     #ci颜色填充
-                   # ci_alpha = 0.8,        #ci透明度
-                   # ci_lty = 1,            #CI的线型
-                   # ci_lwd = 3,          #CI的线宽
-                   # ci_Theight = 0.2, # Set an T end at the end of CI  ci的高度，默认是NULL
-                   # # Reference line width/type/color   参考线默认的参数，中间的竖的虚线
-                   # refline_lwd = 1,       #中间的竖的虚线
-                   # refline_lty = "dashed",
-                   # refline_col = "grey20",
-                   # # Vertical line width/type/color  垂直线宽/类型/颜色   可以添加一条额外的垂直线，如果没有就不显示
-                   # vertline_lwd = 1,              #可以添加一条额外的垂直线，如果没有就不显示
-                   # vertline_lty = "dashed",
-                   # vertline_col = "grey20",
-                   # # Change summary color for filling and borders   更改填充和边框的摘要颜色
-                   # summary_fill = "yellow",       #汇总部分大菱形的颜色
-                   # summary_col = "#4575b4",
-                   # # Footnote font size/face/color  脚注字体大小/字体/颜色
-                   # footnote_cex = 0.6,
-                   # footnote_fontface = "italic",
-                   footnote_col = "red")
+tm <- forest_theme(base_size = 15)
 pdf('./01clinical_analysis/output_multicox_result.pdf',width = 20,height = 20)
 forest(dat[,c(1:2,6:7)],
        est = dat$HR,
@@ -259,66 +145,10 @@ forest(dat[,c(1:2,6:7)],
        theme = tm)
 dev.off()
 
-
-
-
-# Nomogram ----------------------------------------------------------------
-
-# rm(list = ls())
-# load('step00_output.Rdata')
-# {library(survival)
-# library(rms)}
-# 
-# 
-# clinic.nomo <- clinic[,c(data_type,'OS.time','OS','T.stage','Clinical.Stage')]
-# dd=datadist(clinic.nomo)
-# options(datadist="dd") 
-# f <- psm(Surv(OS.time,OS) ~ Without_combined+T.stage+Clinical.Stage, data =  clinic.nomo, dist='lognormal') 
-# med <- Quantile(f) # 计算中位生存时间
-# surv <- Survival(f) # 构建生存概率函数
-# nom <- nomogram(f, 
-#                 fun=function(x) med(lp=x), ## 绘制COX回归中位生存时间的Nomogram图
-#                 funlabel="Median Survival Time")
-# plot(nom)
-# nom <- nomogram(f, fun=list(function(x) surv(365, x), ## 绘制COX回归生存概率的Nomogram图
-#                             function(x) surv(730, x),
-#                             function(x) surv(1095, x)), ## 注意数据的time是以”天“为单位
-#                 funlabel=c("1-year Survival Probability",
-#                            "2-year Survival Probability",
-#                            "3-year Survival Probability"))
-# plot(nom, xfrac=.6)
-# 
-# ## cox regression prediction ability
-# rcorrcens(Surv(OS.time,OS) ~ predict(f), data =  clinic.nomo) ## 计算c-index
-# 
-# ## correction curve
-# f2 <- psm(Surv(OS.time,OS) ~ Without_combined+T.stage+Clinical.Stage, data =  clinic.nomo, x=T, y=T, dist='lognormal') 
-# time=365*1
-# cal1 <- calibrate(f2, 
-#                   cmethod='KM', 
-#                   method="boot", 
-#                   u=time, # consistent with time.inc as former，as 365 or 730；
-#                   m=25, #number per sampling
-#                   B=1000) #sampling counts
-# plot(cal1,lwd=2,lty=1,
-#      conf.int=T,
-#      errbar.col="blue",#color of bar line
-#      col="red", # color of curve
-#      xlab=paste0('Nomogram-Predicted Probability of ',time/365,'-Year OS'),
-#      ylab = paste0('Actual ',time/365,'-Year OS (proportion)'),
-#      subtitles = F)
-
-
 # Signature microbiome -----------------------------------------------------
 rm(list = ls())
 load('step00_output.Rdata')
 library(openxlsx)
-thm <- 
-
-# microbiome <- read.csv(file = './01clinical_analysis/source_data/Raw-ACC.csv',header = T,row.names = 1)
-# colnames(microbiome) <- str_sub(colnames(microbiome),str_locate(colnames(microbiome),'g__')[,'start'],str_length(colnames(microbiome)))
-# microbiome <- microbiome[,micro_sig$X1] %>%
-#   tibble::rownames_to_column(var = 'names')
 
 micro_sig <- read.xlsx('./01clinical_analysis/source_data/Core_features_coefficients.xlsx',sheet = 2,colNames = FALSE,check.names = F)
 
@@ -342,13 +172,6 @@ clinic.PR <- merge(clinic,microbiome_PR,by='names')
   library(RColorBrewer)
   }
 
-# roc_element <- micro_sig[1,'X1']
-# for (i in 2:15) {
-#   roc_element <- paste0(roc_element,'+',micro_sig[i,'X1'])
-# }
-# roc_element
-
-# calculate the auc of each signature microbiome
 roc_result <- data.frame(genus=micro_sig$X1,
                          NR=NA,
                          LR=NA,
@@ -370,36 +193,12 @@ for (j in 1:4) {
 }
 write.table(roc_result,file = './01clinical_analysis/output_AUC_value_of_each_signature_microbiome.tsv',sep = '\t',row.names = T,col.names = NA)
 
-# roc.list <- roc(OS ~ g__Ilyobacter+g__Isosphaera+g__Singulisphaera+g__Thermopetrobacter+g__Chelativorans+g__Pseudorhodobacter+g__Wenxinia+g__Acidocella+g__Diaphorobacter+g__Vitreoscilla+g__Bacteriovorax+g__Desulfuromonas+g__Proteus+g__Terrimicrobium+g__Haloferula, 
-#                 smooth=T,
-#                 data = clinic.PR)
-# 
-# for(i in 1:15){
-#     # x=c('Micro subtype, AUC=','Stage, AUC=','Micro-subtype & Stage, AUC=','Nomogram(without MS), AUC=','Nomogram, AUC=')
-#     # x=paste0(micro_sig[,'X1'],'=')
-#     # x.1 <- paste0(x[i],round((roc.list[[i]])$auc,2))
-#     roc_result[i,'PR'] <- round((roc.list[[i]])$auc,2)
-#     # labels <- c(labels,x.1)
-# }
-
-
-#plot ACU curve
-# for (i in 1:4) {
-#   signature_combine <- psm(Surv(OS.time,OS) ~ g__Ilyobacter+g__Isosphaera+g__Thermopetrobacter+g__Desulfuromonas+g__Terrimicrobium, 
-#                            data =  clinic_type[[i]], dist='lognormal') 
-#   clinic$signature_combine <- predict(signature_combine)[match(clinic$names,clinic_type[[i]]$names)]
-#   colnames(clinic)[which(colnames(clinic)=='signature_combine')] <- paste0('signature_combine_',data_type[i])
-# }
 for (i in 1:4) {
   signature_combine <- psm(Surv(OS.time,OS) ~ g__Ilyobacter+g__Isosphaera+g__Singulisphaera+g__Thermopetrobacter+g__Chelativorans+g__Pseudorhodobacter+g__Wenxinia+g__Acidocella+g__Diaphorobacter+g__Vitreoscilla+g__Bacteriovorax+g__Desulfuromonas+g__Proteus+g__Terrimicrobium+g__Haloferula, 
                            data =  clinic_type[[i]], dist='lognormal') 
   clinic$signature_combine <- predict(signature_combine)[match(clinic$names,clinic_type[[i]]$names)]
   colnames(clinic)[which(colnames(clinic)=='signature_combine')] <- paste0('signature_combine_',data_type[i])
 }
-# 
-# signature_combine <- psm(Surv(OS.time,OS) ~ g__Ilyobacter+g__Isosphaera+g__Thermopetrobacter+g__Desulfuromonas+g__Terrimicrobium, 
-#                          data =  clinic.PR, dist='lognormal') 
-# clinic$signature_combine_PR <- predict(signature_combine)[match(clinic$names,clinic.PR$names)]
 
 roc.list <- roc(OS ~ signature_combine_NR+signature_combine_LR+signature_combine_CR+signature_combine_PR, 
                 smooth=T,
@@ -428,6 +227,7 @@ ggroc(roc.list,linetype = 1, size = 1.2) +
                color="grey", linetype="dashed")
 dev.off()
 
+
 # Time dependent ROC ------------------------------------------------------
 # rm(list = ls())
 { 
@@ -453,10 +253,6 @@ res.cox.stage <- coxph(Surv(OS.time,OS)~T.stage.new,data=clinic.roc)
 clinic.roc$cox.stage <- predict(res.cox.stage)
 ROC.stage <- timeROC(T=clinic.roc$OS.time,delta=clinic.roc$OS,marker=clinic.roc$cox.stage,iid = T,cause=1,weighting="marginal",times=quantile(clinic.roc$OS.time,probs=seq(0.1,0.9,0.05)))
 plotAUCcurve(ROC.stage,col = 'grey')
-# res.cox.t.stage <- coxph(Surv(OS.time,OS)~T.stage,data=clinic.roc)
-# clinic.roc$cox.t.stage <- predict(res.cox.t.stage)
-# ROC.t.stage <- timeROC(T=clinic.roc$OS.time,delta=clinic.roc$OS,marker=clinic.roc$cox.t.stage,iid = T,cause=1,weighting="marginal",times=quantile(clinic.roc$OS.time,probs=seq(0.2,0.9,0.2)))
-# plotAUCcurve(ROC.t.stage,col = 'grey',add = T)
 
 palette <- pal_npg()(6)
 pval <- data.frame()
@@ -480,9 +276,6 @@ abline(v=98.408,lwd=1,lty=2,col="#BC3C29FF")
 legend("bottomleft",c('MS(NR)+Stage','MS(LR)+Stage','MS(CR)+Stage','MS(PR)+Stage','Stage Only'),col=c(pal_npg()(4),'grey'),lty=1,lwd=3)
 
 
-
-
-
 # Random Forest -----------------------------------------------------------
 rm(list = ls())
 library(randomForest)
@@ -495,17 +288,6 @@ microbiome_CR <- read.csv(file = './01clinical_analysis/source_data/Voom-SNM-Fil
 microbiome_PR <- read.csv(file = './01clinical_analysis/source_data/Voom-SNM-Filter-Putative-ACC.csv',header = T,row.names = 1)  
 
 clinic <- clinic[match(rownames(microbiome_NR),clinic$names),]
-# table(clinic$Clinical.Status.3.Mo.Post.Op)
-# ms2_patient <- clinic$PATIENT_ID[clinic$kmeans=='MS2']
-
-# acc_micro_matrix <- read.table(file = './data/ACC_77_filter_144_genus_TMM_normalization.tsv',header = T,row.names = 1,check.names = F,sep = '\t')
-# colnames(acc_micro_matrix) <- clinic$PATIENT_ID[match(colnames(acc_micro_matrix),clinic$names)]
-
-
-# microbes <- as.data.frame(t(acc_micro_matrix[,ms2_patient])) %>% 
-#   mutate(group=clinic$CLINICAL_STATUS_WITHIN_3_MTHS_SURGERY_new[match(rownames(.),clinic$PATIENT_ID)]) %>% 
-#   mutate(group=as.factor(.$group)) %>% 
-#   na.omit()
 variable <- c('Clinical.Stage',
               'ATYPICAL_MITOTIC_FIGURES',
               'Clinical.Status.3.Mo.Post.Op',
@@ -529,16 +311,6 @@ for (i in 1:4) {
   }
 }
 write.table(result,file = './01clinical_analysis/output_random_forest.tsv',sep = '\t',row.names = T,col.names = NA)
-
-# mat <-  microbiome_NR  %>% dplyr::mutate(group=as.factor(clinic$Clinical.Status.3.Mo.Post.Op)) %>% drop_na(group)
-# set.seed(430)
-# rf = randomForest(group~ .,data=mat, ntree=500, importance=TRUE, proximity=TRUE)
-# x <- rf$importance
-# 
-# print(rf)
-# 
-# varImpPlot(rf,n.var = 10,main = 'Random Forest')
-
 
 
 # MS & PHENOTYPE ----------------------------------------------------------
@@ -625,7 +397,7 @@ for (i in 1:4) {
     theme(legend.position = 'right')+
     scale_fill_manual(values = c(MS1="#0072B5CC",MS2="#E18727CC"))+
     guides(fill=guide_legend(direction = "horizontal",ncol =1))+
-    labs(x="", y = "ADS ", fill = "")+  # fill为修改图例标题
+    labs(x="", y = "ADS ", fill = "")+  
     stat_compare_means(aes(x = MS , y = ADS),label = "p.format",size=6)
   print(p)
   dev.off()
