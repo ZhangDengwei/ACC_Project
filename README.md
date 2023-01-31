@@ -1,2 +1,2 @@
 # ACC_Project
-Intratumor microbes in adrenocortical carcinoma
+Intratumor microbiota in adrenocortical carcinoma
