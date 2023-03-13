@@ -391,10 +391,10 @@ function_sur <- function(group, title){
   eval(parse(text = commands))
   
 #fit <- survfit(Surv(OS_MONTHS, CENSOR) ~ group, data = df_meta_alpha)
-  p <- ggsurvplot(fit, # 创建的拟合对象
-                             data = df_meta_alpha,  # 指定变量数据来源
-                             conf.int = TRUE, # 显示置信区间
-                             pval = TRUE, # 添加P值
+  p <- ggsurvplot(fit,
+                             data = df_meta_alpha,
+                             conf.int = TRUE,
+                             pval = TRUE,
                              palette = c("#0072B5CC","#E18727CC"),
                              title = title,
                              xlab = "Time (Monthes)", 
