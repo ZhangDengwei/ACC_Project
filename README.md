@@ -10,4 +10,4 @@ Intratumor microbiota in adrenocortical carcinoma
 
 10.Host_Microbiome_Analysis: This folder contains files used on procrustes analysis and sparseCCA analysis.
 
-Rscripts: This is the R script file of all relevant codes in this study. Ordered as each figure appears in the manuscript.
+R_scripts: This is the R script file of all relevant codes in this study. Ordered as each figure appears in the manuscript.
