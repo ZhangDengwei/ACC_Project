@@ -355,23 +355,5 @@ ggplot(result1,aes(x = type, y =reorder(Description,Count)))+
   theme_bw()+
   thm
 dev.off()
-# gsea plot
-result2 <- gsea_result %>% .[-1,]
-{
-  library(enrichplot)
-  library(ggsci)
-}
 
-pathway=c('Cell cycle','p53 signaling pathway','TGF-beta signaling pathway','ECM-receptor interaction')
-pdf('./03transcriptomic_analysis/output_gsea_p53_signaling_pathway.pdf')
-gseaplot2(gsea_result_list[[3]],
-          c(grep(pathway[2],gsea_result_list[[3]]@result[,'Description'])),
-          pvalue_table = TRUE,
-          title = paste0('GSEA_',data_type[3]),
-          base_size = 10,
-          rel_heights = c(1.5,0.5,1),
-          color = pal_npg()(1),
-          ES_geom = "line")
-dev.off()
-NES <- gsea_result_list[[3]]@result[grep(pathway[2],gsea_result_list[[3]]@result[,'Description']),'NES'];NES
 
