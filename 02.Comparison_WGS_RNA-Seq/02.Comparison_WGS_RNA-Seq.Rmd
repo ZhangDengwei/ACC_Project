@@ -1,0 +1,298 @@
+---
+title: "Comparison_WGS_RNA-Seq"
+output: html_document
+date: "2023-03-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### load requirements
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+library(psych)
+library(ggpubr)
+library(vegan)
+library(reshape2)
+```
+
+
+### load metadata 
+```{r}
+df_metadata <- read.csv("../00.Data/Metadata-TCGA-Kraken-17625-Samples.csv")
+# only included primary tumor
+df_metadata_PT <- df_metadata %>% filter(sample_type=="Primary Tumor")
+```
+
+
+### load microbial data from Poore's study
+As the file size exceeds 500 Mb, the raw input files, including Metadata-TCGA-Kraken-17625-Samples.csv, Kraken-TCGA-Raw-Data-17625-Samples.csv, Kraken-TCGA-Voom-SNM-Full-Data.csv, Kraken-TCGA-Voom-SNM-Likely-Contaminants-Removed-Data.csv, Kraken-TCGA-Voom-SNM-Plate-Center-Filtering-Data.csv, Kraken-TCGA-Voom-SNM-All-Putative-Contaminants-Removed-Data.csv, Kraken-TCGA-Voom-SNM-Most-Stringent-Filtering-Data.csv, can be acquired at http://ftp.microbio.me/pub/cancer_microbiome_analysis/TCGA/Kraken/. Please cite the original paper (https://doi.org/10.1038/s41586-020-2095-1) that produces these microbial data.
+```{r}
+df_raw <- read.csv("../00.Data/Kraken-TCGA-Raw-Data-17625-Samples.csv")
+df_normalization <- read.csv("../00.Data/Kraken-TCGA-Voom-SNM-Full-Data.csv")
+df_normalization_filter_likely <- read.csv("../00.Data/Kraken-TCGA-Voom-SNM-Likely-Contaminants-Removed-Data.csv")
+df_normalization_filter_Plate_Center <- read.csv("../00.Data/Kraken-TCGA-Voom-SNM-Plate-Center-Filtering-Data.csv")
+df_normalization_filter_putative <- read.csv("../00.Data/Kraken-TCGA-Voom-SNM-All-Putative-Contaminants-Removed-Data.csv")
+df_normalization_filter_stringent <- read.csv("../00.Data/Kraken-TCGA-Voom-SNM-Most-Stringent-Filtering-Data.csv")
+
+# include primary tumor
+df_normalization_PT <- df_normalization %>% filter(X %in% df_metadata_PT$id) %>% remove_rownames %>% column_to_rownames(var="X")
+df_normalization_filter_likely_PT <- df_normalization_filter_likely %>% filter(X %in% df_metadata_PT$id) %>% remove_rownames %>% column_to_rownames(var="X")
+df_normalization_filter_Plate_Center_PT <- df_normalization_filter_Plate_Center %>% filter(X %in% df_metadata_PT$id) %>% remove_rownames %>% column_to_rownames(var="X")
+df_normalization_filter_putative_PT <- df_normalization_filter_putative %>% filter(X %in% df_metadata_PT$id) %>% remove_rownames %>% column_to_rownames(var="X")
+df_normalization_filter_stringent_PT <- df_normalization_filter_stringent %>% filter(X %in% df_metadata_PT$id) %>% remove_rownames %>% column_to_rownames(var="X")
+
+# fish out patients containing both WGS and RNA-Seq
+df_patients <- unique(df_metadata_PT[, c("case_uuid", "experimental_strategy")])
+df_patients$type <- NA
+for (i in 1:nrow(df_patients)){
+  df_sub <- df_patients %>% filter(case_uuid==df_patients$case_uuid[i])
+  number_type <- length(unique(df_sub$experimental_strategy))
+  df_patients$type[i] <- number_type
+}
+df_patients_two <- df_patients %>% filter(type==2)
+pateints_two <- unique(df_patients_two$case_uuid)
+
+# fish out patients containing more than one WGS
+df_patients_WGS <-df_metadata_PT %>% filter(experimental_strategy=="WGS")
+df_patients_WGS_no <- table(df_patients_WGS$case_uuid) %>% as.data.frame()
+
+df_patients_WGS_two <- df_patients_WGS_no %>% filter(Freq>1)
+pateints_WGS_two <- unique(df_patients_WGS_two$Var1)
+```
+
+
+### compare microbota between WGS and RNA-Seq or between WGS itself based on Bray-Curtis distance
+```{r}
+dist2list <- function(inDist) {
+        if (class(inDist) != "dist") stop("wrong input type")
+        A <- attr(inDist, "Size")
+        B <- if (is.null(attr(inDist, "Labels"))) sequence(A) else attr(inDist, "Labels")
+        if (isTRUE(attr(inDist, "Diag"))) attr(inDist, "Diag") <- FALSE
+        if (isTRUE(attr(inDist, "Upper"))) attr(inDist, "Upper") <- FALSE
+        data.frame(
+          row = B[unlist(lapply(sequence(A)[-1], function(x) x:A))],
+          col = rep(B[-length(B)], (length(B)-1):1),
+          value = as.vector(inDist))
+}
+
+# WGS vs. RNA-Seq for individuals
+function_bray <- function(in_matrix){
+  v_cor <- vector()
+  for (patient in pateints_two){
+    meta_sub <- df_metadata_PT %>% filter(case_uuid==patient)
+    df_data <- in_matrix[meta_sub$id, ]
+    df_data[df_data<0] <- 0
+    distance <- vegdist(df_data, method = 'bray')
+    df_dist <- dist2list(distance)
+    df_dist_m1 <- merge(df_dist, meta_sub[,c("id","experimental_strategy")], by.x="row", by.y = "id", all.x = TRUE)
+    df_dist_m2 <- merge(df_dist_m1, meta_sub[,c("id","experimental_strategy")], by.x="col", by.y = "id", all.x = TRUE)
+    df_dist_m2$filter <- ifelse(df_dist_m2$experimental_strategy.x!=df_dist_m2$experimental_strategy.y, "Y", "X")
+    df_dist_m2 <- df_dist_m2 %>% filter(filter=="Y")
+    v_cor <- append(v_cor, df_dist_m2$value)
+  }
+  return(v_cor)
+}
+
+v_vor_nor_bray <- function_bray(df_normalization_PT)
+v_vor_nor_f_likely_bray <- function_bray(df_normalization_filter_likely_PT)
+v_vor_nor_f_PC_bray <- function_bray(df_normalization_filter_Plate_Center_PT)
+v_vor_nor_f_putative_bray <- function_bray(df_normalization_filter_putative_PT)
+v_vor_nor_f_strigent_bray <- function_bray(df_normalization_filter_stringent_PT)
+
+# WGS for individuals
+function_bray_WGS <- function(in_matrix){
+  v_cor <- vector()
+  for (patient in pateints_WGS_two){
+    meta_sub <- df_metadata_PT %>% filter(case_uuid==patient)
+    df_data <- in_matrix[meta_sub$id, ]
+    df_data[df_data<0] <- 0
+    distance <- vegdist(df_data, method = 'bray')
+    df_dist <- dist2list(distance)
+    v_cor <- append(v_cor, df_dist$value)
+  }
+  return(v_cor)
+}
+
+v_vor_nor_bray_WGS <- function_bray_WGS(df_normalization_PT)
+v_vor_nor_f_likely_bray_WGS <- function_bray_WGS(df_normalization_filter_likely_PT)
+v_vor_nor_f_PC_bray_WGS <- function_bray_WGS(df_normalization_filter_Plate_Center_PT)
+v_vor_nor_f_putative_bray_WGS <- function_bray_WGS(df_normalization_filter_putative_PT)
+v_vor_nor_f_strigent_bray_WGS <- function_bray_WGS(df_normalization_filter_stringent_PT)
+
+# combine results
+df_bray_nor <- data.frame(bray=c(v_vor_nor_bray,v_vor_nor_bray_WGS),
+                         class=c(rep("WGS_RNASeq", length(v_vor_nor_bray)), rep("WGS", length(v_vor_nor_bray_WGS))))
+df_bray_nor_f_likely <- data.frame(bray=c(v_vor_nor_f_likely_bray,v_vor_nor_f_likely_bray_WGS),
+                                  class=c(rep("WGS_RNASeq", length(v_vor_nor_f_likely_bray)), rep("WGS", length(v_vor_nor_f_likely_bray_WGS))))
+df_bray_nor_f_PC <- data.frame(bray=c(v_vor_nor_f_PC_bray,v_vor_nor_f_PC_bray_WGS),
+                              class=c(rep("WGS_RNASeq", length(v_vor_nor_f_PC_bray)), rep("WGS", length(v_vor_nor_f_PC_bray_WGS))))
+df_bray_nor_f_putative <- data.frame(bray=c(v_vor_nor_f_putative_bray,v_vor_nor_f_putative_bray_WGS),
+                                    class=c(rep("WGS_RNASeq", length(v_vor_nor_f_putative_bray)), rep("WGS", length(v_vor_nor_f_putative_bray_WGS))))
+df_bray_nor_f_strigent <- data.frame(bray=c(v_vor_nor_f_strigent_bray,v_vor_nor_f_strigent_bray_WGS),
+                                    class=c(rep("WGS_RNASeq", length(v_vor_nor_f_strigent_bray)), rep("WGS", length(v_vor_nor_f_strigent_bray_WGS))))
+
+# visualization
+function_plot_b <- function(in_matrix){
+  pd <- ggplot(in_matrix, aes(x=bray, fill=class)) +
+    geom_density(alpha=0.6) +
+    theme_classic()+
+    scale_fill_manual(values = c("#0072B5CC","#E18727CC"))+
+    ylab("Density") +
+    xlab("Bray-Curtis dissimilarity")+
+    theme(axis.title = element_text(size = 18, colour="black"),
+          axis.text = element_text(size = 16, colour = "black"),
+          legend.text = element_text(size = 16),
+          legend.position = "bottom")
+  pb <- ggplot(in_matrix, aes(x=class, y=bray, fill=class)) +
+    geom_boxplot(outlier.size=0.1) +
+    #theme_base()+
+    scale_fill_manual(values = c("#0072B5CC","#E18727CC"))+
+    coord_flip()+
+    theme(panel.background = element_blank())+
+    clean_theme()
+  p_m <- ggarrange(pb, pd,
+                   ncol = 1, nrow = 2,  align = "hv", 
+                   widths = c(1, 1), heights = c(1, 2.5),
+                   common.legend = TRUE)
+  return(p_m)
+}
+
+p_bray <- function_plot_b(df_bray_nor)
+p_bray_f_likely <- function_plot_b(df_bray_nor_f_likely)
+p_bray_f_PC <- function_plot_b(df_bray_nor_f_PC)
+p_bray_f_putative <- function_plot_b(df_bray_nor_f_putative)
+p_bray_strigent <- function_plot_b(df_bray_nor_f_strigent)
+
+# pdf(file = "Figures/Comparison_Bray–Curtis_dissimilarity_WGS_RNASeq.pdf", width = 5, height = 5)
+p_bray
+p_bray_f_likely
+p_bray_f_PC
+p_bray_f_putative
+p_bray_strigent
+# dev.off()
+```
+
+
+### compare the normalized overall microbota between WGS and RNA-Seq based on abundance
+```{r}
+function_r <- function(in_matrix, method){
+  v_cor <- vector()
+  for (patient in pateints_two){
+    meta_sub <- df_metadata_PT %>% filter(case_uuid==patient)
+    id_RNA <- meta_sub[meta_sub$experimental_strategy=="RNA-Seq", ]$id
+    id_WGS <- meta_sub[meta_sub$experimental_strategy=="WGS", ]$id
+    df_RNASeq <- in_matrix[id_RNA, ] %>% t() %>% as.data.frame()
+    df_WGS <- in_matrix[id_WGS, ]  %>% t() %>% as.data.frame()
+    
+    m <- corr.test(df_RNASeq, df_WGS, method=method)
+    co_eff <- as.vector(m$r)
+    v_cor <- append(v_cor, co_eff)
+  }
+  return(v_cor)
+}
+
+v_vor_nor_pearson <- function_r(df_normalization_PT, "pearson")
+v_vor_nor_f_likely_pearson <- function_r(df_normalization_filter_likely_PT, "pearson")
+v_vor_nor_f_PC_pearson <- function_r(df_normalization_filter_Plate_Center_PT, "pearson")
+v_vor_nor_f_putative_pearson <- function_r(df_normalization_filter_putative_PT, "pearson")
+v_vor_nor_f_strigent_pearson <- function_r(df_normalization_filter_stringent_PT, "pearson")
+
+v_vor_nor_spearman <- function_r(df_normalization_PT, "spearman")
+v_vor_nor_f_likely_spearman <- function_r(df_normalization_filter_likely_PT, "spearman")
+v_vor_nor_f_PC_spearman <- function_r(df_normalization_filter_Plate_Center_PT, "spearman")
+v_vor_nor_f_putative_spearman <- function_r(df_normalization_filter_putative_PT, "spearman")
+v_vor_nor_f_strigent_spearman <- function_r(df_normalization_filter_stringent_PT, "spearman")
+
+# pdf(file = "Figures/Comparison_WGS_RNASeq.pdf", width = 5, height = 5)
+hist(v_vor_nor_pearson, breaks = 1000,  main = "Pearson_Normalization")
+hist(v_vor_nor_f_likely_pearson, breaks = 1000,  main = "Pearson_Normalization_f_likely")
+hist(v_vor_nor_f_PC_pearson, breaks = 1000,  main = "Pearson_Normalization_f_PC")
+hist(v_vor_nor_f_putative_pearson, breaks = 1000,  main = "Pearson_Normalization_f_putative")
+hist(v_vor_nor_f_strigent_pearson, breaks = 1000,  main = "Pearson_Normalization_f_strigent")
+hist(v_vor_nor_spearman, breaks = 1000,  main = "Spearman_Normalization")
+hist(v_vor_nor_f_likely_spearman, breaks = 1000,  main = "Spearman_Normalization_f_likely")
+hist(v_vor_nor_f_PC_spearman, breaks = 1000,  main = "Spearman_Normalization_f_PC")
+hist(v_vor_nor_f_putative_spearman, breaks = 1000,  main = "Spearman_Normalization_f_putative")
+hist(v_vor_nor_f_strigent_spearman, breaks = 1000,  main = "Spearman_Normalization_f_strigent")
+# dev.off()
+```
+
+
+### compare the normalized overall microbiota between WGS their self
+```{r}
+function_r_WGS <- function(in_matrix, method){
+  v_cor <- vector()
+  for (patient in pateints_WGS_two){
+    meta_sub <- df_metadata_PT %>% filter(case_uuid==patient)
+    df_sub <- in_matrix[meta_sub$id, ] %>% t() %>% as.data.frame()
+    m <- corr.test(df_sub, method=method)
+    co_eff <- as.vector(m$r)
+    co_eff <- co_eff[co_eff!=1]
+    v_cor <- append(v_cor, co_eff)
+  }
+  return(v_cor)
+}
+
+v_vor_nor_pearson_WGS <- function_r_WGS(df_normalization_PT, "pearson")
+v_vor_nor_f_likely_pearson_WGS <- function_r_WGS(df_normalization_filter_likely_PT, "pearson")
+v_vor_nor_f_PC_pearson_WGS <- function_r_WGS(df_normalization_filter_Plate_Center_PT, "pearson")
+v_vor_nor_f_putative_pearson_WGS <- function_r_WGS(df_normalization_filter_putative_PT, "pearson")
+v_vor_nor_f_strigent_pearson_WGS<- function_r_WGS(df_normalization_filter_stringent_PT, "pearson")
+
+
+df_cor_nor <- data.frame(pearson=c(v_vor_nor_pearson,v_vor_nor_pearson_WGS),
+                    class=c(rep("WGS_RNASeq", length(v_vor_nor_pearson)), rep("WGS", length(v_vor_nor_pearson_WGS))))
+df_cor_nor_f_likely <- data.frame(pearson=c(v_vor_nor_f_likely_pearson,v_vor_nor_f_likely_pearson_WGS),
+                                  class=c(rep("WGS_RNASeq", length(v_vor_nor_f_likely_pearson)), rep("WGS", length(v_vor_nor_f_likely_pearson_WGS))))
+df_cor_nor_f_PC <- data.frame(pearson=c(v_vor_nor_f_PC_pearson,v_vor_nor_f_PC_pearson_WGS),
+                              class=c(rep("WGS_RNASeq", length(v_vor_nor_f_PC_pearson)), rep("WGS", length(v_vor_nor_f_PC_pearson_WGS))))
+df_cor_nor_f_putative <- data.frame(pearson=c(v_vor_nor_f_putative_pearson,v_vor_nor_f_putative_pearson_WGS),
+                                    class=c(rep("WGS_RNASeq", length(v_vor_nor_f_putative_pearson)), rep("WGS", length(v_vor_nor_f_putative_pearson_WGS))))
+df_cor_nor_f_strigent <- data.frame(pearson=c(v_vor_nor_f_strigent_pearson,v_vor_nor_f_strigent_pearson_WGS),
+                                    class=c(rep("WGS_RNASeq", length(v_vor_nor_f_strigent_pearson)), rep("WGS", length(v_vor_nor_f_strigent_pearson_WGS))))
+
+# visualization
+function_plot_p <- function(in_matrix){
+  pd <- ggplot(in_matrix, aes(x=pearson, fill=class)) +
+    geom_density(alpha=0.6) +
+    theme_classic()+
+    scale_fill_manual(values = c("#0072B5CC","#E18727CC"))+
+    ylab("Density") +
+    xlab("Pearson correlation coefficient")+
+    theme(axis.title = element_text(size = 18, colour="black"),
+          axis.text = element_text(size = 16, colour = "black"),
+          legend.text = element_text(size = 16),
+          legend.position = "bottom")
+  pb <- ggplot(in_matrix, aes(x=class, y=pearson, fill=class)) +
+    geom_boxplot(outlier.size=0.1) +
+    #theme_base()+
+    scale_fill_manual(values = c("#0072B5CC","#E18727CC"))+
+    coord_flip()+
+    theme(panel.background = element_blank())+
+    clean_theme()
+  p_m <- ggarrange(pb, pd,
+                   ncol = 1, nrow = 2,  align = "hv", 
+                   widths = c(1, 1), heights = c(1, 2.5),
+                   common.legend = TRUE)
+  return(p_m)
+}
+
+p_nor <- function_plot_p(df_cor_nor)
+p_nor_f_likely <- function_plot_p(df_cor_nor_f_likely)
+p_nor_f_PC <- function_plot_p(df_cor_nor_f_PC)
+p_nor_f_putative <- function_plot_p(df_cor_nor_f_putative)
+p_nor_strigent <- function_plot_p(df_cor_nor_f_strigent)
+
+# pdf(file = "Figures/Comparison_correlation_WGS_RNASeq.pdf", width = 5, height = 5)
+p_nor
+p_nor_f_likely
+p_nor_f_PC
+p_nor_f_putative
+p_nor_strigent
+# dev.off()
+```
+

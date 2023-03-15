@@ -1,0 +1,78 @@
+﻿id,SEX,Ethnicity_Race,Neoplasm_Status,Clinical_Status_3_Mo_Post-Op,Clinical_Stage,Surgical_margin,Excessive_Hormone,AGE,ATYPICAL_MITOTIC_FIGURES,Distant_Metastasis,CAPSULAR_INVASION,NUCLEAR_GRADE,Lymph_node,T_stage
+s134,Male,WHITE,WITH TUMOR,NA,Stage II,R0,Present,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Absent,I-II,N0,T2
+s114,Female,WHITE,WITH TUMOR,Present,Stage IV,R1+R2,Present,<60,Atypical Mitotic Figures Present,M1,Invasion of Tumor Capsule Present,III-IV,N0,T3
+s108,Female,WHITE,WITH TUMOR,Absent,Stage III,R0,Present,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Absent,III-IV,N0,T3
+s142,Male,WHITE,WITH TUMOR,Present,Stage III,R1+R2,Absent,<60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Present,III-IV,N0,T4
+s153,Female,NOT WHITE,TUMOR FREE,Absent,Stage II,R0,Present,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Absent,I-II,N0,T2
+s139,Female,WHITE,WITH TUMOR,Absent,Stage III,R1+R2,Present,<60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Present,III-IV,N0,T3
+s152,Male,WHITE,WITH TUMOR,Absent,Stage III,R0,Present,>60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Present,III-IV,N0,T3
+s154,Female,WHITE,WITH TUMOR,Absent,Stage II,R0,Absent,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Absent,III-IV,N0,T2
+s110,Female,WHITE,WITH TUMOR,Present,Stage IV,R1+R2,Present,<60,Atypical Mitotic Figures Present,M1,Invasion of Tumor Capsule Present,III-IV,N0,T4
+s113,Male,WHITE,NA,Present,Stage IV,R1+R2,Absent,<60,Atypical Mitotic Figures Present,M1,Invasion of Tumor Capsule Present,III-IV,N0,T4
+s177,Female,WHITE,TUMOR FREE,NA,Stage II,R0,Absent,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Absent,III-IV,N0,T2
+s141,Female,WHITE,WITH TUMOR,NA,Stage I,R0,Present,<60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Present,III-IV,N0,T1
+s164,Female,WHITE,TUMOR FREE,Absent,Stage II,R0,Present,>60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Present,III-IV,N0,T2
+s143,Male,WHITE,WITH TUMOR,Present,Stage IV,R1+R2,Present,>60,Atypical Mitotic Figures Present,M1,Invasion of Tumor Capsule Present,III-IV,N1,T4
+s158,Male,WHITE,TUMOR FREE,Absent,Stage I,R0,Absent,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Absent,III-IV,N0,T1
+s150,Male,WHITE,WITH TUMOR,Present,Stage IV,R1+R2,Absent,>60,Atypical Mitotic Figures Present,M1,Invasion of Tumor Capsule Present,III-IV,N1,T4
+s132,Male,WHITE,TUMOR FREE,Present,Stage IV,R1+R2,Absent,<60,Atypical Mitotic Figures Present,M1,Invasion of Tumor Capsule Present,III-IV,N0,T4
+s105,Female,WHITE,TUMOR FREE,Absent,Stage I,R0,Present,<60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Absent,III-IV,N0,T1
+s120,Female,WHITE,WITH TUMOR,Present,Stage IV,R1+R2,Present,<60,Atypical Mitotic Figures Present,M1,Invasion of Tumor Capsule Present,III-IV,N0,T4
+s107,Female,WHITE,TUMOR FREE,Absent,Stage I,R0,Absent,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Absent,III-IV,N0,T1
+s160,Male,WHITE,TUMOR FREE,Absent,Stage II,R0,Absent,<60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Absent,III-IV,N0,T2
+s145,Female,WHITE,TUMOR FREE,Absent,Stage II,R0,Absent,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Absent,III-IV,N0,T2
+s148,Male,WHITE,TUMOR FREE,Absent,Stage I,R0,Absent,<60,NA,M0,Invasion of Tumor Capsule Present,I-II,N0,T1
+s156,Female,WHITE,WITH TUMOR,Absent,Stage II,R0,Absent,>60,NA,M0,Invasion of Tumor Capsule Absent,NA,N0,T2
+s137,Female,WHITE,WITH TUMOR,Absent,Stage II,R0,Present,>60,NA,M0,Invasion of Tumor Capsule Absent,NA,N0,T2
+s118,Male,WHITE,TUMOR FREE,Absent,Stage II,R0,Absent,<60,NA,M0,Invasion of Tumor Capsule Absent,NA,N0,T2
+s115,Male,WHITE,TUMOR FREE,Absent,Stage II,R0,Present,<60,NA,M0,NA,NA,N0,T2
+s102,Male,WHITE,TUMOR FREE,Absent,Stage III,R0,Absent,<60,NA,M0,Invasion of Tumor Capsule Present,NA,N0,T3
+s109,Female,WHITE,WITH TUMOR,Present,Stage IV,R1+R2,Present,>60,NA,M1,Invasion of Tumor Capsule Present,NA,N1,T4
+s146,Male,WHITE,TUMOR FREE,Absent,Stage II,R0,Absent,<60,NA,M0,Invasion of Tumor Capsule Present,NA,N0,T2
+s165,Female,WHITE,WITH TUMOR,Absent,Stage II,R0,Present,>60,NA,M0,Invasion of Tumor Capsule Present,NA,N0,T2
+s157,Male,WHITE,TUMOR FREE,Absent,Stage II,NA,Absent,<60,NA,M0,Invasion of Tumor Capsule Present,NA,N0,T2
+s147,Female,WHITE,WITH TUMOR,Present,Stage III,R0,Present,<60,NA,M0,Invasion of Tumor Capsule Present,NA,N0,T4
+s140,Male,WHITE,TUMOR FREE,Absent,Stage II,R0,Absent,<60,NA,M0,Invasion of Tumor Capsule Present,NA,N0,T2
+s149,Female,WHITE,TUMOR FREE,Absent,Stage III,R1+R2,Absent,>60,NA,M0,Invasion of Tumor Capsule Absent,NA,N0,T4
+s133,Female,WHITE,WITH TUMOR,NA,Stage III,R0,Present,<60,NA,M0,Invasion of Tumor Capsule Present,NA,N0,T3
+s112,Female,WHITE,WITH TUMOR,Absent,Stage II,R0,Present,<60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Absent,III-IV,N0,T2
+s159,Male,WHITE,TUMOR FREE,Absent,Stage II,R0,Present,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Present,III-IV,N0,T2
+s104,Female,WHITE,WITH TUMOR,Absent,Stage II,R0,Present,>60,NA,M0,NA,NA,N0,T2
+s117,Female,WHITE,WITH TUMOR,Absent,Stage IV,R0,Present,<60,Atypical Mitotic Figures Present,M1,Invasion of Tumor Capsule Present,III-IV,N0,T4
+s162,Female,WHITE,TUMOR FREE,Absent,Stage I,R0,Present,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Absent,I-II,N0,T1
+s155,Female,WHITE,TUMOR FREE,Absent,Stage II,R0,Present,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Absent,I-II,N0,T2
+s166,Female,WHITE,TUMOR FREE,Absent,Stage III,R0,Present,<60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Absent,III-IV,N1,T2
+s138,Female,WHITE,TUMOR FREE,Absent,Stage III,R0,Present,<60,NA,M0,NA,NA,N1,T2
+s174,Female,WHITE,WITH TUMOR,Absent,Stage III,R0,NA,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Present,III-IV,N1,T2
+s171,Female,WHITE,WITH TUMOR,Present,Stage IV,R1+R2,Present,<60,Atypical Mitotic Figures Present,M1,Invasion of Tumor Capsule Present,I-II,N1,T4
+s144,Male,WHITE,WITH TUMOR,Present,Stage II,NA,Present,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Present,III-IV,N0,T2
+s106,Female,WHITE,TUMOR FREE,Absent,Stage I,R0,Present,>60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Absent,III-IV,N0,T1
+s136,Female,WHITE,TUMOR FREE,Absent,Stage III,NA,Present,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Present,III-IV,N0,T4
+s161,Female,WHITE,TUMOR FREE,Absent,Stage I,R0,Present,>60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Present,III-IV,N0,T1
+s130,Male,WHITE,TUMOR FREE,Absent,Stage II,R0,Present,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Absent,III-IV,N0,T2
+s116,Female,WHITE,TUMOR FREE,Absent,Stage II,R0,Present,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Present,I-II,N0,T2
+s125,Female,WHITE,TUMOR FREE,Absent,Stage II,R0,Present,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Absent,III-IV,N0,T2
+s103,Female,WHITE,TUMOR FREE,Absent,Stage II,R0,Absent,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Present,III-IV,N0,T2
+s111,Male,WHITE,WITH TUMOR,Absent,Stage IV,R0,Present,<60,Atypical Mitotic Figures Absent,M1,Invasion of Tumor Capsule Absent,I-II,N0,T4
+s126,Female,WHITE,WITH TUMOR,Present,Stage IV,R1+R2,Present,>60,Atypical Mitotic Figures Absent,M1,Invasion of Tumor Capsule Present,I-II,N0,T4
+s123,Male,WHITE,WITH TUMOR,Absent,Stage III,NA,Absent,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Absent,I-II,N0,T4
+s128,Male,WHITE,WITH TUMOR,Absent,Stage II,R0,NA,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Absent,III-IV,N0,T2
+s169,Male,WHITE,WITH TUMOR,Absent,Stage III,NA,Present,<60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Present,III-IV,N0,T3
+s173,Female,WHITE,WITH TUMOR,Present,Stage II,R0,Present,<60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Absent,I-II,N0,T2
+s178,Female,WHITE,WITH TUMOR,Present,Stage IV,R1+R2,Present,<60,Atypical Mitotic Figures Present,M1,Invasion of Tumor Capsule Absent,III-IV,N1,T2
+s127,Male,NA,TUMOR FREE,Absent,Stage II,R0,Absent,>60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Absent,III-IV,N0,T2
+s129,Female,NA,WITH TUMOR,Absent,Stage II,R0,Present,>60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Present,III-IV,N0,T2
+s170,Male,NA,TUMOR FREE,Absent,Stage II,R0,Present,<60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Present,III-IV,N0,T2
+s163,Female,NA,TUMOR FREE,Absent,Stage II,R0,Absent,<60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Present,III-IV,N0,T2
+s151,Female,NA,WITH TUMOR,Absent,Stage II,R0,Present,>60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Present,III-IV,N0,T2
+s135,Female,NA,TUMOR FREE,Absent,Stage II,R0,Absent,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Present,III-IV,N0,T2
+s124,Female,NA,TUMOR FREE,Absent,Stage II,R0,Present,<60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Present,III-IV,N0,T2
+s121,Female,NA,TUMOR FREE,Absent,Stage II,R0,Present,<60,Atypical Mitotic Figures Absent,M0,Invasion of Tumor Capsule Absent,III-IV,N0,T2
+s131,Male,NA,TUMOR FREE,Absent,Stage III,R0,Absent,<60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Present,III-IV,N0,T3
+s122,Female,WHITE,WITH TUMOR,Present,Stage IV,NA,Absent,<60,Atypical Mitotic Figures Absent,M1,Invasion of Tumor Capsule Present,I-II,N1,T2
+s167,Female,WHITE,WITH TUMOR,Present,Stage III,NA,Present,<60,NA,M0,NA,III-IV,N0,T4
+s180,Female,WHITE,WITH TUMOR,Present,Stage IV,R1+R2,Present,<60,Atypical Mitotic Figures Absent,M1,Invasion of Tumor Capsule Present,III-IV,N0,T4
+s179,Male,WHITE,TUMOR FREE,Absent,Stage II,R0,NA,<60,NA,M0,NA,NA,N0,T2
+s168,Male,WHITE,TUMOR FREE,NA,Stage II,R0,NA,<60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Absent,III-IV,N0,T2
+s172,Female,NOT WHITE,TUMOR FREE,Absent,Stage II,R0,Present,<60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Absent,I-II,N0,T2
+s175,Male,NA,TUMOR FREE,Absent,Stage I,R0,Absent,>60,Atypical Mitotic Figures Present,M0,Invasion of Tumor Capsule Present,III-IV,N0,T1
