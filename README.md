@@ -2,6 +2,8 @@
 Intratumor microbiota in adrenocortical carcinoma
 
 # File description
+00.Data: input tables for downstream analysis.
+
 01.Comparison-ACC-PCPG: The folder contains the script used to (1) retrieve the microbial abundance, (2) inspect the microbial profiles at different levels of filtering, and (3) compare the intratumoral microbiome difference between ACC and PCPG.
 
 02.Comparison_WGS_RNA-Seq: The folder contains the script used to compare the microbial profile identified from WGS and RNA-Seq data.
@@ -23,5 +25,7 @@ Intratumor microbiota in adrenocortical carcinoma
 10.Host_Microbiome_Analysis: This folder contains files used on procrustes analysis and sparseCCA analysis.
 
 metadata: The matedata of 79 ACC patients.
+
+Tables: Intermediate files generated during the bioinformatic analysis
 
 R_scripts: The R script file of all relevant codes in this study. Ordered as each figure appears in the manuscript.
