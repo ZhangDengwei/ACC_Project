@@ -1,0 +1,47 @@
+2023-03-15 20:28:14 INFO::Writing function arguments to log file
+2023-03-15 20:28:14 DEBUG::Function arguments
+2023-03-15 20:28:14 DEBUG::Output folder: Temp/strigent_group_PC
+2023-03-15 20:28:14 DEBUG::Min Abundance: 0.000000
+2023-03-15 20:28:14 DEBUG::Min Prevalence: 0.000000
+2023-03-15 20:28:14 DEBUG::Normalization: NONE
+2023-03-15 20:28:14 DEBUG::Transform: NONE
+2023-03-15 20:28:14 DEBUG::Analysis method: LM
+2023-03-15 20:28:14 DEBUG::Max significance: 0.250000
+2023-03-15 20:28:14 DEBUG::Random effects: SEX,Ethnicity_Race,AGE,Neoplasm_Status,Clinical_Status_3_Mo_Post.Op,Surgical_margin,ATYPICAL_MITOTIC_FIGURES
+2023-03-15 20:28:14 DEBUG::Fixed effects: PC_combined
+2023-03-15 20:28:14 DEBUG::Correction method: BH
+2023-03-15 20:28:14 DEBUG::Standardize: TRUE
+2023-03-15 20:28:14 DEBUG::Cores: 6
+2023-03-15 20:28:14 INFO::Verifying options selected are valid
+2023-03-15 20:28:14 INFO::Determining format of input files
+2023-03-15 20:28:14 INFO::Input format is data samples as rows and metadata samples as rows
+2023-03-15 20:28:14 DEBUG::A total of 77 samples were found in both the data and metadata
+2023-03-15 20:28:14 DEBUG::Reordering data/metadata to use same sample ordering
+2023-03-15 20:28:14 INFO::Formula for random effects: expr ~ (1 | SEX) + (1 | Ethnicity_Race) + (1 | AGE) + (1 | Neoplasm_Status) + (1 | Clinical_Status_3_Mo_Post.Op) + (1 | Surgical_margin) + (1 | ATYPICAL_MITOTIC_FIGURES)
+2023-03-15 20:28:14 INFO::Formula for fixed effects: expr ~  PC_combined
+2023-03-15 20:28:14 INFO::Filter data based on min abundance and min prevalence
+2023-03-15 20:28:14 INFO::Total samples in data: 77
+2023-03-15 20:28:14 INFO::Min samples required with min abundance for a feature not to be filtered: 0.000000
+2023-03-15 20:28:14 INFO::Total filtered features: 0
+2023-03-15 20:28:14 INFO::Filtered feature names from abundance and prevalence filtering:
+2023-03-15 20:28:14 INFO::Total filtered features with variance filtering: 0
+2023-03-15 20:28:14 INFO::Filtered feature names from variance filtering:
+2023-03-15 20:28:14 INFO::Running selected normalization method: NONE
+2023-03-15 20:28:14 INFO::Applying z-score to standardize continuous metadata
+2023-03-15 20:28:14 INFO::Running selected transform method: NONE
+2023-03-15 20:28:14 INFO::Running selected analysis method: LM
+2023-03-15 20:28:14 INFO::Creating cluster of 6 R processes
+2023-03-15 20:28:28 INFO::Counting total values for each feature
+2023-03-15 20:28:28 WARNING::Deleting existing residuals file: Temp/strigent_group_PC/residuals.rds
+2023-03-15 20:28:28 INFO::Writing residuals to file Temp/strigent_group_PC/residuals.rds
+2023-03-15 20:28:28 WARNING::Deleting existing fitted file: Temp/strigent_group_PC/fitted.rds
+2023-03-15 20:28:28 INFO::Writing fitted values to file Temp/strigent_group_PC/fitted.rds
+2023-03-15 20:28:28 WARNING::Deleting existing ranef file: Temp/strigent_group_PC/ranef.rds
+2023-03-15 20:28:28 INFO::Writing extracted random effects to file Temp/strigent_group_PC/ranef.rds
+2023-03-15 20:28:28 INFO::Writing all results to file (ordered by increasing q-values): Temp/strigent_group_PC/all_results.tsv
+2023-03-15 20:28:28 INFO::Writing the significant results (those which are less than or equal to the threshold of 0.250000 ) to file (ordered by increasing q-values): Temp/strigent_group_PC/significant_results.tsv
+2023-03-15 20:28:28 INFO::Writing heatmap of significant results to file: Temp/strigent_group_PC/heatmap.pdf
+2023-03-15 20:28:28 INFO::Writing association plots (one for each significant association) to output folder: Temp/strigent_group_PC
+2023-03-15 20:28:28 INFO::Plotting associations from most to least significant, grouped by metadata
+2023-03-15 20:28:28 INFO::Plotting data for metadata number 1, PC_combined
+2023-03-15 20:28:28 INFO::Creating boxplot for categorical data, PC_combined vs k__Bacteria.p__Deinococcus.Thermus.c__Deinococci.o__Thermales.f__Thermaceae.g__Meiothermus
