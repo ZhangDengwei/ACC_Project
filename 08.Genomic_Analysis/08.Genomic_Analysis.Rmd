@@ -1,0 +1,375 @@
+---
+title: "08.Genomic_Analysis"
+output: html_document
+date: '2023-03-14'
+---
+
+```{r, setup,include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,message = FALSE,warning = FALSE)
+```
+
+## load requirements
+
+```{r}
+{
+  require(maftools)
+  library(tidyr)
+  library(stringr)
+  library(ggpubr)
+  library(magrittr)
+  library(ComplexHeatmap)
+  library(RColorBrewer)
+  library(circlize)
+  library(ggunchained)
+}
+```
+
+## Landscape of mut and cnv(customed)
+
+```{r}
+clinic <- read.table(file = './00data_preparation/ACC_clinic.tsv',sep = '\t',header=T)
+maf <- read.csv(file = './02genomic_analysis/source_data/ACC_mutect2.csv',header = T,row.names = 1,check.names = F) %>% 
+  dplyr::mutate(Tumor_Sample_Barcode=str_sub(.$Tumor_Sample_Barcode,1,12)) %>% 
+  .[.$Tumor_Sample_Barcode%in% clinic$PATIENT_ID,] #all patients=77
+
+# clinical annotation
+clinicalData <- clinic[,c('Without_combined',"Likely_combined","PC_combined","Putative_combined",'AGE_new','PATIENT_ID')]
+colnames(clinicalData)[6] <- c("Tumor_Sample_Barcode")
+
+# 在oncoprint中加入自定义CNV图景
+interest_cytoband <- c('TERT','F12','CDK4','TERF2','CETN2','GPS1','BRD4','CTBP1','ANG','CCNE1','ZNRF3','DCTD','RERE','LSAMP','CDKN2A','RB1','PTPRD','PRKAR1A','CTSD','AGXT','ACLY','ADRA1D','RBFOX1','CCR6','DLG2','RAB11FIP4')
+gistic <- read.table(file = './02genomic_analysis/source_data/TCGA-ACC.cnv.gistic.tsv',sep = '\t',header = T,check.names = F) %>% 
+  .[.$Symbol%in%interest_cytoband,] %>% 
+  .[match(interest_cytoband,.$Symbol),] %>% 
+  mutate(Symbol=c('5p15.33','5q35.3','12q14.1','16q22.1','Xq28','17q25.3','19p13.12','4p16.3','14q11.2','19q12','22q12.1','4q35.1','1p36.23','3q13.31','9p21.3','13q14.2','9p23','17q24.2','11p15.5','2q37.3','17q21.31','20p12.1','16p13.3','6q26','11q14.1','17q11.2')) %>% 
+  gather(.,key = 'PATIENT',value ='gistic_score',-1) %>% 
+  mutate(gistic_score=ifelse(.$Symbol=='11p15.5' & .$gistic_score>0,0,.$gistic_score)) %>% 
+  mutate(gistic_score=ifelse(.$Symbol=='14q11.2' & .$gistic_score<0,0,.$gistic_score)) %>% 
+  mutate(CN=ifelse(.$gistic_score>0,'Amp',ifelse(.$gistic_score<0,'Del',NA))) %>% 
+  mutate(gistic_score=NULL) %>% 
+  na.omit() %>% 
+  plyr::rename(c('PATIENT'='Tumor_Sample_Barcode')) %>% 
+  .[.$Tumor_Sample_Barcode%in%clinic$PATIENT_ID,]
+
+mut.plus.cnv = read.maf(maf = maf,
+                        cnTable = gistic,
+                        clinicalData = clinicalData,
+                        verbose = F)
+features <- c('TP53', 'ZNFR3', 'CTNNB1', 'PRKAR1A', 'CCNE1','TERF2','MEN1','RPL22','5p15.33','5q35.3','12q14.1','16q22.1','Xq28','17q25.3','19p13.12','4p16.3','14q11.2','19q12','22q12.1','4q35.1','1p36.23','3q13.31','9p21.3','13q14.2','9p23','17q24.2','11p15.5','2q37.3','17q21.31','20p12.1','16p13.3','6q26','11q14.1','17q11.2')
+
+```
+
+## Comparison of genes between MS1 and MS2
+```{r}
+data_type <- c('Without_combined',"Likely_combined","PC_combined","Putative_combined")
+for (i in 1:4) {
+  ms1_patient <- clinic$PATIENT_ID[clinic[,data_type[i]]=='MS1']
+  ms2_patient <- clinic$PATIENT_ID[clinic[,data_type[i]]=='MS2']
+  mut1 <- maf[maf$Tumor_Sample_Barcode%in%ms1_patient,] 
+  mut2 <- maf[maf$Tumor_Sample_Barcode%in%ms2_patient,] 
+  gistic1 <- gistic[gistic$Tumor_Sample_Barcode%in%ms1_patient,]
+  gistic2 <- gistic[gistic$Tumor_Sample_Barcode%in%ms2_patient,]
+  mut.plus.cnv1 = read.maf(maf = mut1,
+                           cnTable = gistic1,
+                           clinicalData = clinicalData,
+                           verbose = F)
+  mut.plus.cnv2 = read.maf(maf = mut2,
+                           cnTable = gistic2,
+                           clinicalData = clinicalData,
+                           verbose = F)
+  pt.vs.rt <- mafCompare(m1 = mut.plus.cnv1, m2 = mut.plus.cnv2, m1Name = 'MS1', m2Name = 'MS2',minMut = 0) 
+  diff_mut_cnv_genes <- pt.vs.rt$results %>% 
+    .[.$Hugo_Symbol%in%features,] 
+  # Functional enrichment of mut and cnv genes
+  print(data_type[i])
+  OncogenicPathways(maf = mut.plus.cnv1) 
+}
+print(diff_mut_cnv_genes)
+```
+
+## Visualization of mut and cnv(customed) by complexheatmap
+```{r}
+mat<-read.table(file="./02genomic_analysis/onco_matrix_heatmap.txt",check.names = F,
+                header = T, row.names = 1,stringsAsFactors = FALSE,sep = "\t")
+mat[mat==0]<-""
+
+vc_cols = RColorBrewer::brewer.pal(n = 10, name = 'Paired') 
+vc_cols[9:10] <- c('#104E8B','#FF3030')
+names(vc_cols) = c(
+  'Frame_Shift_Del',
+  'Missense_Mutation',
+  'Nonsense_Mutation',
+  'Multi_Hit',
+  'Frame_Shift_Ins',
+  'In_Frame_Ins',
+  'Splice_Site',
+  'In_Frame_Del',
+  'Del',
+  'Amp'
+)
+
+col <- vc_cols
+alter_fun <- list(
+  background = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"), h-unit(0.5, "mm"), 
+              gp = gpar(fill = "#CCCCCC", col = NA))
+  },
+  Nonsense_Mutation = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+              gp = gpar(fill = col["Nonsense_Mutation"], col = NA))
+  },
+  Missense_Mutation = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+              gp = gpar(fill = col["Missense_Mutation"], col = NA))
+  },
+  Splice_Site = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+              gp = gpar(fill = col["Splice_Site"], col = NA))
+  },
+  Frame_Shift_Del = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+              gp = gpar(fill = col["Frame_Shift_Del"], col = NA))
+  },
+  Frame_Shift_Ins = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+              gp = gpar(fill = col["Frame_Shift_Ins"], col = NA))
+  },
+  In_Frame_Del = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+              gp = gpar(fill = col["In_Frame_Del"], col = NA))
+  },
+  Multi_Hit = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+              gp = gpar(fill = col["Multi_Hit"], col = NA))
+  },
+  Amp = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"), h-unit(0.5, "mm"), 
+              gp = gpar(fill = col["Amp"], col = NA))
+  },
+  Del = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"),h-unit(0.5, "mm"), 
+              gp = gpar(fill = col["Del"], col = NA))
+  }
+)
+
+clinic <- clinic[order(clinic$Without_combined),] 
+mat <- mat[,clinic$PATIENT_ID]
+
+row_group <- c(rep('Mutation',5),rep('CNV',26)) 
+names(row_group) <- rownames(mat)
+
+#top annotation
+top_anno = HeatmapAnnotation(NR = clinic$Without_combined,
+                             LR=clinic$Likely_combined,
+                             CR=clinic$PC_combined,
+                             PR=clinic$Putative_combined,
+                             Age=clinic$AGE,
+                             Sex=clinic$SEX,
+                             gap = unit(1, "mm"),
+                             col = list(NR = c("MS1" = "#0072B5CC", "MS2" = "#E18727CC"),
+                                        LR = c("MS1" = "#0072B5CC", "MS2" = "#E18727CC"),
+                                        CR = c("MS1" = "#0072B5CC", "MS2" = "#E18727CC"),
+                                        PR = c("MS1" = "#0072B5CC", "MS2" = "#E18727CC"),
+                                        Sex=c('Male'='#8B4C39','Female'='#FF82AB'),
+                                        Age=colorRamp2(c(0, 80), c("white", "red")))
+)
+
+#bottom annotation
+bottom_anno <- HeatmapAnnotation(column_barplot = anno_oncoprint_barplot(height = unit(1,'cm'))) 
+
+# right annotation
+data_type_1 <- c('Without_combined',"Likely_combined","PC_combined","Putative_combined")
+data_type_2 <- c('NR','LR','CR','PR')
+text=data.frame(row.names = rownames(mat))
+for (i in 1:4) {
+  data <- read.table(file = paste0('./02genomic_analysis/output_Diff_genes_of_mut_and_cnv(customed)_between_MS1_MS2_',data_type_1[i],'.tsv'),sep = '\t',header = T) %>%
+    .[match(rownames(mat),.$Hugo_Symbol),]
+  data <- data[match(rownames(mat),data$Hugo_Symbol),]
+  text[,i]=round(data[,'pval'],2)
+}
+text <- ifelse(text<0.05,'*','')
+
+right_anno <- rowAnnotation( 'NR'=anno_text(text[,'V1'],which = 'row',show_name = TRUE,
+                                                  location = 0.5, just = "center",
+                                                  gp = gpar(fill = NA, col = "red",fontsize=25, border = NA),
+                                                  width = max_text_width(month.name)*0.5),
+                             'LR'=anno_text(text[,'V2'],which = 'row',show_name = TRUE,
+                                            location = 0.5, just = "center",
+                                            gp = gpar(fill = NA, col = "red", fontsize=25,border = NA),
+                                            width = max_text_width(month.name)*0.5),
+                             'CR'=anno_text(text[,'V3'],which = 'row',show_name = TRUE,
+                                            location = 0.5, just = "center",
+                                            gp = gpar(fill = NA, col = "red",fontsize=25, border = NA),
+                                            width = max_text_width(month.name)*0.5),
+                             'PR'=anno_text(text[,'V4'],which = 'row',show_name = TRUE,
+                                            location = 0.5, just = "center",
+                                            gp = gpar(fill = NA, col = "red",fontsize=25, border = NA),
+                                            width = max_text_width(month.name)*0.5),
+                             annotation_name_rot = 0)
+
+oncoPrint(mat,
+          alter_fun = alter_fun, 
+          col = vc_cols, 
+          column_title='77 ACC Samples',
+          row_split = row_group,
+          # column_split = colomn_group,
+          row_gap = unit(1, "mm"),
+          show_pct = F,
+          row_names_side = "left",
+          row_order = 1:nrow(mat),
+          column_order = 1:ncol(mat),
+          # column_order = column_order,
+          top_annotation = top_anno,
+          bottom_annotation =bottom_anno,
+          # right_annotation = right_anno,
+          show_heatmap_legend=T,
+          remove_empty_columns = F, 
+          remove_empty_rows = F)
+
+```
+
+## Visualization of mut and cnv(customed) significantly by complexheatmap
+```{r}
+mat1 <- mat[c('14q11.2','22q12.1','9p21.3','CTNNB1','TP53'),]
+
+vc_cols = RColorBrewer::brewer.pal(n = 10, name = 'Paired') 
+vc_cols[9:10] <- c('#104E8B','#FF3030')
+names(vc_cols) = c(
+  'Frame_Shift_Del',
+  'Missense_Mutation',
+  'Nonsense_Mutation',
+  'Multi_Hit',
+  'Frame_Shift_Ins',
+  'In_Frame_Ins',
+  'Splice_Site',
+  'In_Frame_Del',
+  'Del',
+  'Amp'
+)
+col <- vc_cols
+alter_fun <- list(
+  background = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"), h-unit(0.5, "mm"), 
+              gp = gpar(fill = "#CCCCCC", col = NA))
+  },
+  # big blue
+  Nonsense_Mutation = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+              gp = gpar(fill = col["Nonsense_Mutation"], col = NA))
+  },
+  # bug red
+  Missense_Mutation = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+              gp = gpar(fill = col["Missense_Mutation"], col = NA))
+  },
+  # small green
+  Splice_Site = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+              gp = gpar(fill = col["Splice_Site"], col = NA))
+  },
+  Frame_Shift_Del = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+              gp = gpar(fill = col["Frame_Shift_Del"], col = NA))
+  },
+  Frame_Shift_Ins = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+              gp = gpar(fill = col["Frame_Shift_Ins"], col = NA))
+  },
+  In_Frame_Del = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+              gp = gpar(fill = col["In_Frame_Del"], col = NA))
+  },
+  Multi_Hit = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+              gp = gpar(fill = col["Multi_Hit"], col = NA))
+  },
+  Amp = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"), h-unit(0.5, "mm"), 
+              gp = gpar(fill = col["Amp"], col = NA))
+  },
+  Del = function(x, y, w, h) {
+    grid.rect(x, y, w-unit(0.5, "mm"),h-unit(0.5, "mm"), 
+              gp = gpar(fill = col["Del"], col = NA))
+  }
+)
+
+clinic <- clinic[order(clinic$Without_combined),] 
+mat1 <- mat1[,clinic$PATIENT_ID]
+
+row_group <- c(rep('CNV',3),rep('Mutation',2)) 
+names(row_group) <- rownames(mat1)
+
+top_anno = HeatmapAnnotation(NR = clinic$Without_combined,
+                             LR=clinic$Likely_combined,
+                             CR=clinic$PC_combined,
+                             PR=clinic$Putative_combined,
+                             Age=clinic$AGE,
+                             Sex=clinic$SEX,
+                             gap = unit(1, "mm"),
+                             col = list(NR = c("MS1" = "#0072B5CC", "MS2" = "#E18727CC"),
+                                        LR = c("MS1" = "#0072B5CC", "MS2" = "#E18727CC"),
+                                        CR = c("MS1" = "#0072B5CC", "MS2" = "#E18727CC"),
+                                        PR = c("MS1" = "#0072B5CC", "MS2" = "#E18727CC"),
+                                        Sex=c('Male'='#8B4C39','Female'='#FF82AB'),
+                                        Age=colorRamp2(c(0, 80), c("white", "red")))
+)
+
+bottom_anno <- HeatmapAnnotation(column_barplot = anno_oncoprint_barplot(height = unit(1,'cm'))) 
+
+oncoPrint(mat1,
+          alter_fun = alter_fun,
+          row_order = 1:nrow(mat1),
+          column_order = 1:ncol(mat1),
+          show_pct = F,
+          row_split = row_group,
+          row_names_side = "left",
+          top_annotation = top_anno,
+          column_gap = unit(3, "mm"),
+          col = vc_cols)
+```
+
+## TMB and FGA Comparison between MS1 & MS2
+```{r}
+# TMB
+tmb = tmb(maf = read.maf(maf = maf), captureSize = 50, logScale = FALSE) %>% 
+  as.data.frame() %>% 
+  merge(.,clinic,by.x="Tumor_Sample_Barcode",by.y="PATIENT_ID")
+outlier_values <- boxplot.stats(tmb$total_perMB)$out  
+tmb <- tmb[!(tmb$total_perMB %in% outlier_values),]
+tmb.x <- dplyr::select(tmb,c(total_perMB,Without_combined,Likely_combined,PC_combined,Putative_combined)) %>%
+  gather(.,data_type,MS,-total_perMB) %>% 
+  dplyr::mutate(data_type=factor(.$data_type,levels = c('Without_combined','Likely_combined','PC_combined','Putative_combined')))
+
+ggplot(tmb.x, aes(x=data_type, y=total_perMB,fill=MS)) +
+  geom_split_violin(trim = FALSE,color = NA)+
+  stat_summary(fun = mean,
+               fun.min = function(x){quantile(x)[2]},
+               fun.max = function(x){quantile(x)[4]},
+               geom = "pointrange",
+               size=0.5,
+               position = position_dodge(width = 0.2))+
+  theme_bw()+
+  scale_fill_manual(values = c(MS1="#0072B5CC",MS2="#E18727CC"))+
+  guides(fill=guide_legend(direction = "horizontal",nrow =1))+
+  labs(x="", y = "Tumor Muation Burden(Total_perMB)", fill = "")+  
+  stat_compare_means(aes(x = data_type, y = total_perMB,group=MS),method = "wilcox.test",label = "p.signif",size=8)
+
+# Fraction Genome Altered(FGA)
+FGA <- dplyr::select(clinic,c(Fraction.Genome.Altered,Without_combined,Likely_combined,PC_combined,Putative_combined)) %>%
+  gather(.,data_type,MS,-Fraction.Genome.Altered) %>% 
+  dplyr::mutate(data_type=factor(.$data_type,levels = c('Without_combined','Likely_combined','PC_combined','Putative_combined')))
+ggplot(FGA, aes(x=data_type, y=Fraction.Genome.Altered,fill=MS)) +
+  geom_split_violin(trim = FALSE,color = NA)+
+  stat_summary(fun = mean,
+               fun.min = function(x){quantile(x)[2]},
+               fun.max = function(x){quantile(x)[4]},
+               geom = "pointrange",
+               size=0.5,
+               position = position_dodge(width = 0.2))+
+  theme_bw()+
+  scale_fill_manual(values = c(MS1="#0072B5CC",MS2="#E18727CC"))+
+  guides(fill=guide_legend(direction = "horizontal",nrow =1))+
+  labs(x="", y = "Fraction Genome Altered", fill = "")+  
+  stat_compare_means(aes(x = data_type, y = Fraction.Genome.Altered,group=MS),method = "wilcox.test",label = "p.signif",size=8)
+```
+
