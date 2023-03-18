@@ -20,7 +20,7 @@ Intratumor microbiota in adrenocortical carcinoma
 
 08.Genomic_Analysis: This folder contains files used on landscape of genomic events.
 
-09.Transcriptomic_Analysis: This folder contains files used on ESTIMATE score, TIL score, DEG analysis, and GSEA analysis.
+09.Transcriptomic_Analysis: This folder contains files used on ESTIMATE score, TIL score, DEG analysis, KEGG analysis and GSEA analysis.
 
 10.Host_Microbiome_Analysis: This folder contains files used on procrustes analysis and sparseCCA analysis.
 
