@@ -1,0 +1,115 @@
+---
+title: "08_cluster_and_phenotypes"
+author: "Yuqing Li"
+date: "2025-05-21"
+output: html_document
+---
+
+### Load requirements
+```{r, message=FALSE,warning=FALSE}
+{
+  library(plyr)
+  library(dplyr)
+  library(ggplot2)
+  library(ggthemes)
+  library(ggpubr)
+  library(RColorBrewer)
+  library(tidyverse)
+  library(data.table)
+  library(magrittr)
+  library(ggsci)
+}
+
+# themes
+thm <- theme_bw()+
+  theme(panel.border = element_rect(),
+        panel.grid.major = element_blank(),   
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black",size=0.5),
+        text = element_text(size = 20),
+        axis.text.x = element_text(size=25,color ='black'),
+        axis.text.y = element_text(size = 20,color = 'black'),
+        axis.title.y = element_text(size = 20),
+        plot.subtitle  = element_text(face = 'italic',hjust = 0.5),
+        legend.position='bottom',
+        legend.text = element_text(size = 15,hjust = 0),
+        legend.title = element_text(size = 20)
+  )
+```
+
+### Load data
+```{r, message=FALSE,warning=FALSE}
+# clinical data
+df_meta_ACC_tcga <- read.csv("./00_data_preparation/metadata.csv",na.strings = "") %>% 
+  filter(COHORT=='TCGA')
+
+df_cluster_clinical <- read.csv("./clustering/whole/pam/Unsupervised_clustering.csv") %>% 
+  dplyr::select(c("PATIENT_ID", "genus_tcga_s_euclidean")) %>% 
+  setNames(c("PATIENT_ID", "MS")) %>% 
+  dplyr::mutate(MS=recode(.$MS,'1'="MS1",'2'="MS2")) %>% 
+  dplyr::mutate(MS = as.factor(MS)) %>% 
+  merge(., df_meta_ACC_tcga, by="PATIENT_ID", all = TRUE) %>% 
+  set_rownames(.$PATIENT_ID)
+```
+
+### Microbial clustering and phenotypes
+```{r, message=FALSE,warning=FALSE}
+
+pheno <- c('Histology','C1A_C1B','mRNA_K4','miRNA_cluster','MethyLevel','SCNA_cluster','protein_cluster','COC')
+
+# plot for phenos
+for (i in 1:length(pheno)) {
+  dat <- data.frame(table(df_cluster_clinical[,c('MS',pheno[i])])) %>% 
+    ddply(.(MS),transform,percent=Freq/sum(Freq)*100) 
+  colnames(dat)[1:2] <- c('Var1','Var2')
+  x <- matrix(dat$Freq,ncol=2)
+  if (sum(x<5)>0){
+    pvalue <- fisher.test(x)$p.value
+    print(pvalue)
+  }else{
+    pvalue <- chisq.test(x)$p.value
+    print(pvalue)
+  }
+  legend_n <- length(unique(dat$Var2))
+  # pdf(paste0('./cluster_and_phenotypes/output_MS_&','_',pheno[i],'.pdf'))
+  p <- dat%>%
+    drop_na() %>% 
+    ggplot(aes(fill=Var2,x=Var1,y=Freq))+
+    geom_bar(position = 'fill',stat = 'identity',width = 0.8)+
+    guides(fill=guide_legend(title=pheno[i],direction = "horizontal",
+                             nrow=ifelse(legend_n>4,3,ifelse(legend_n>1,2,1)))) +
+    scale_fill_manual(values = c(pal_nejm(alpha = 0.9)(3)[2:3],pal_nejm(alpha = 0.9)(1),pal_nejm(alpha = 0.9)(8)[4:8]))+
+    scale_y_continuous(labels = scales::percent)+
+    coord_fixed(ratio = 5/2)+
+    labs(x='',y='Proportion %',
+         subtitle = paste0("P ", ifelse(pvalue<0.001, "< 0.001", paste0("= ",round(pvalue,3)))))+
+    thm
+  print(p)
+  # dev.off()
+}
+
+
+# MS & ADS
+# pdf(paste0('./cluster_and_phenotypes/output_MS_&_ADS.pdf'),width = 5,height = 6)
+p <- ggplot(data = df_cluster_clinical,aes(x=MS, y=ADS)) + 
+  geom_violin(trim=T) +
+  geom_jitter(shape=16, color="grey",size=2.0,position=position_jitter(0.2))+
+  geom_boxplot(width=0.1,position=position_dodge(0.8),aes(fill=MS))+
+  thm+
+  theme(legend.position = 'right')+
+  scale_fill_manual(values = c(MS1="#0072B5CC",MS2="#E18727CC"))+
+  guides(fill=guide_legend(direction = "horizontal",ncol =1))+
+  labs(x="", y = "ADS ", fill = "")+  
+  stat_compare_means(aes(x = MS , y = ADS),
+                     label = "p.format",
+                     size=6,
+                     label.x = 1.5, 
+                     label.y = Inf,
+                     vjust = 1.3,
+                     hjust=0.5)+
+  thm
+print(p)
+# dev.off()
+```
+
