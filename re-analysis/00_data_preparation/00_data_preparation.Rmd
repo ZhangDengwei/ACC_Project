@@ -1,0 +1,237 @@
+---
+title: "00_data_preparation"
+author: "Yuqing Li"
+date: "2025-05-21"
+output: html_document
+---
+
+### Load requirements
+
+```{r, echo=FALSE,message=FALSE,warning=FALSE}
+{
+  library(magrittr)
+  library(dplyr)
+  library(stringr)
+  library(tidyr)
+  library(data.table)
+  library(readxl)
+  library(tidyverse)
+  library(caret)
+  library(openxlsx)
+  library(phyloseq)
+  library(microbiome)
+  library(UpSetR)
+  library(sjPlot)
+  library(magrittr)
+  library(stringr)
+  library(dplyr)
+  library(rjson)
+  library(devtools)
+  library(tidyverse)
+  library(data.table)
+  library(tinyarray)
+  library(AnnotationDbi)
+  library(org.Hs.eg.db)
+  library(clusterProfiler)
+}
+```
+
+### Clinical info
+```{r, message=FALSE,warning=FALSE}
+if(TRUE){
+  
+  # TCGA
+  clinic_tcga_1 <- read.table(file = './source_data/cBioPortal/data_clinical_patient.txt',header = T,sep = '\t') 
+  clinic_tcga_2 <- read.xlsx('./source_data/Cell_Hu/TCGA-CDR-SupplementalTableS1.xlsx',sheet = 1,colNames = T) %>% #https://gdc.cancer.gov/about-data/publications/pancanatlas
+    dplyr::filter(type=='ACC') %>%
+    dplyr::select(c(bcr_patient_barcode,OS,OS.time,PFI,PFI.time)) %>%
+    dplyr::rename(PATIENT_ID=bcr_patient_barcode) %>% 
+    # dplyr::mutate(PATIENT_ID=paste0(.$PATIENT_ID,'_PT')) %>%
+    dplyr::mutate(OS.time=as.numeric(round((.$OS.time)/30,2))) %>% 
+    dplyr::mutate(PFI.time=as.numeric(round((.$PFI.time)/30,2)))
+  clinic_tcga_3 <- read.csv(file = './source_data/Nature_Poore/Metadata-TCGA-Kraken-17625-Samples.csv',header = T,row.names = 1,check.names = F) %>%
+    filter(investigation=='TCGA-ACC',sample_type%in%c('Primary Tumor','Solid Tissue Normal')) %>% 
+    tibble::rownames_to_column(var = 'SAMPLE') %>% 
+    dplyr::select(c(SAMPLE,case_uuid))
+  clinic_tcga_4 <- read.table(file = './source_data/ACC_Fraction_Genome_Altered.txt',header = TRUE,sep = '\t',check.names = FALSE)
+  clinic_tcga_5 <- read.table(file = './source_data/Nature_Genetics_Bertherat /ACC_tcga_ref_cluster.txt',header = TRUE,sep = '\t',check.names = FALSE)
+  clinic_tcga_6 <- read.table(file = './source_data/ACC_tcga_tumor_weight.txt',header = TRUE,sep = '\t',check.names = FALSE)
+  clinic_tcga <- merge(clinic_tcga_1,clinic_tcga_2,by='PATIENT_ID',all.x = T) %>% 
+    dplyr::mutate(OTHER_PATIENT_ID=tolower(.$OTHER_PATIENT_ID)) %>% 
+    dplyr::rename(OS_Months = OS.time,OS_Status=OS,PFS_Months=PFI.time,PFS_Status=PFI,STAGE=AJCC_PATHOLOGIC_TUMOR_STAGE,T_STAGE=PATH_T_STAGE,N_STAGE=PATH_N_STAGE,M_STAGE=CLIN_M_STAGE) %>% 
+    dplyr::mutate(SUBTYPE=rep('ACC',nrow(.))) %>%
+    dplyr::mutate(COHORT='TCGA') %>% 
+    merge(.,clinic_tcga_3,by.x='OTHER_PATIENT_ID',by.y = 'case_uuid',all=TRUE) %>% 
+    merge(.,clinic_tcga_4,by='PATIENT_ID',all=TRUE) %>%
+    merge(.,clinic_tcga_5,by='PATIENT_ID',all=TRUE) %>%
+    merge(.,clinic_tcga_6,by='PATIENT_ID',all=TRUE) %>%
+    dplyr::mutate(across(everything(), ~ ifelse(. %in% c('[Not Available]','[Discrepancy]','[Not Applicable]'), NA, .))) %>% 
+    dplyr::mutate(Sample_type='tumor') %>% 
+    dplyr::filter(!is.na(STAGE)) %>%
+    dplyr::filter(!is.na(SAMPLE)) 
+  
+  # Huashan
+  clinic_huashan <- read.csv(file = './source_data/Huashan/metadata_acc_huashan.csv',header = TRUE) %>% 
+    dplyr::rename("SAMPLE"='Sample_id',"PATIENT_ID"='Patient_id','AGE'='Age',"SEX"='Sex','OS_Status'='OS_status','OS_Months'='OS_time','PFS_Months'='PFS_time','PFS_Status'='PFS_status','RACE'='Race') %>%
+    dplyr::filter(Sample_type=='tumor') %>% 
+    dplyr::filter(SAMPLE!='N181650_A2') %>% 
+    dplyr::mutate(COHORT='HUASHAN')
+  
+  # 合并临床数据
+  clinic_combine <- dplyr::bind_rows(list(clinic_tcga,clinic_huashan)) 
+  
+  write.csv(clinic_combine,file = './00_data_preparation/metadata.csv',na='',row.names = FALSE)
+}
+```
+
+### Microbial matrix(count)
+
+```{r, message=FALSE,warning=FALSE}
+if(TRUE){
+  
+  # TCGA_Z
+  otu_tcga_z_species_count <- read.csv(file = './source_data/ACC_table_gz/ACC_otutable_bacteria_species.csv',header  = T,check.names = FALSE,row.names = 1) %>% 
+    dplyr::select(-cancertype) %>% 
+    set_rownames(str_sub(rownames(.),1,12)) %>% 
+    mutate(across(where(is.character), as.numeric)) %>% 
+    t() %>% 
+    as.data.frame() %>% 
+    set_rownames(gsub('s___','s__',rownames(.))) %>% 
+    set_rownames(gsub("[-:/ ]",'_',rownames(.))) %>% 
+    set_rownames(gsub("[(.*)]", "", rownames(.))) %>%  
+    set_rownames(gsub("\\[|\\]", "", rownames(.))) %>% 
+    .[,clinic_tcga$PATIENT_ID]
+  
+  otu_tcga_z_genus_count <- read.csv(file = './source_data/ACC_table_gz/ACC_otutable_bacteria_genus.csv',header  = T,check.names = FALSE,row.names = 1) %>% 
+    dplyr::select(-cancertype) %>% 
+    set_rownames(str_sub(rownames(.),1,12)) %>% 
+    mutate(across(where(is.character), as.numeric)) %>% 
+    t() %>% 
+    as.data.frame() %>% 
+    .[,clinic_tcga$PATIENT_ID]
+  
+  # TCGA_S
+  otu_tcga_s_species_count <- read.xlsx('./source_data/TCGA_S/ACC_species_counts_Salzberg_lab_analysis.xlsx',rowNames = TRUE,sheet = 2) %>% 
+    dplyr::select(-c(Total,Mean,Min,Max)) %>%
+    .[-1,] %>% 
+    set_rownames(gsub("[-:/ ]",'_',rownames(.))) %>% 
+    set_rownames(gsub("[(.*)]", "", rownames(.))) %>% 
+    set_rownames(gsub("\\[|\\]", "", rownames(.))) %>%  
+    set_rownames(paste0('s__',rownames(.))) %>% 
+    mutate(across(where(is.character), as.numeric)) %>% 
+    set_colnames(clinic_tcga$PATIENT_ID[match(colnames(.),clinic_tcga$SAMPLE)]) %>% 
+    .[,clinic_tcga$PATIENT_ID]
+  
+  otu_tcga_s_genus_count <- read.xlsx('./source_data/TCGA_S/ACC_genus_counts_Salzberg_lab_analysis.xlsx',rowNames = TRUE,sheet = 2) %>% 
+    dplyr::select(-c(Total,Mean,Min,Max)) %>%
+    # .[-1,] %>% 
+    set_rownames(gsub("[-:/ ]",'_',rownames(.))) %>% 
+    set_rownames(gsub("[(.*)]", "", rownames(.))) %>%  
+    set_rownames(gsub("\\[|\\]", "", rownames(.))) %>% 
+    set_rownames(paste0('g__',rownames(.))) %>% 
+    mutate(across(where(is.character), as.numeric)) %>% 
+    set_colnames(clinic_tcga$PATIENT_ID[match(colnames(.),clinic_tcga$SAMPLE)]) %>% 
+    .[,clinic_tcga$PATIENT_ID]
+  
+  # Huashan
+  otu_huashan_genus_count <- read.csv(file = './source_data/Huashan/16S_genus_abundance.filter.detail.csv',header = T,row.names = 1,check.names = F) %>%
+    dplyr::select(-c('N181650_A2')) %>% 
+    dplyr::filter(!str_detect(rownames(.),'d__Bacteria|Unknown')) %>% 
+    set_rownames(paste0('g__',rownames(.))) %>% 
+    set_rownames(gsub("[-:/ ]",'_',rownames(.))) %>% 
+    set_rownames(gsub("[(.*)]", "", rownames(.))) %>%  
+    set_rownames(gsub("\\[|\\]", "", rownames(.))) %>% 
+    set_colnames(clinic_huashan$PATIENT_ID[match(colnames(.),clinic_huashan$SAMPLE)])
+  
+  # combine
+  otu_species_count_list <- list(otu_tcga_z_species_count,otu_tcga_s_species_count)
+  otu_genus_count_list <- list(otu_tcga_z_genus_count,otu_tcga_s_genus_count,otu_huashan_genus_count)
+  
+  write.xlsx(otu_species_count_list,'./00_data_preparation/otu_species_count_table.xlsx',rowNames=T,sheetName=c('TCGA_Z','TCGA_S'))
+  write.xlsx(otu_genus_count_list,'./00_data_preparation/otu_genus_count_table.xlsx',rowNames=T,sheetName=c('TCGA_Z','TCGA_S','HUASHAN'))
+  
+}
+```
+
+### Microbial matrix (cpm)
+
+```{r, message=FALSE,warning=FALSE}
+if(TRUE){
+  
+  ## 1. TCGA_Z
+  otu_tcga_z_species_cpm <- otu_tcga_z_species_count
+  reads_tcga <- read.csv(file = './source_data/CancerLetters_Zhang/ACC.reads.stat.csv')%>% 
+    dplyr::rename('SAMPLE'='id') %>% 
+    dplyr::mutate(SAMPLE=str_sub(SAMPLE,1,12)) %>% 
+    .[match(colnames(otu_tcga_z_species_cpm),.$SAMPLE),]
+  for (i in 1:ncol(otu_tcga_z_species_cpm)) {
+    otu_tcga_z_species_cpm[,i]<-otu_tcga_z_species_cpm[,i]*10^6/as.numeric(reads_tcga$raw_reads)[i]
+  }
+  
+  otu_tcga_z_genus_cpm <- otu_tcga_z_genus_count
+  reads_tcga <- read.csv(file = './source_data/CancerLetters_Zhang/ACC.reads.stat.csv')%>% 
+    dplyr::rename('SAMPLE'='id') %>% 
+    dplyr::mutate(SAMPLE=str_sub(SAMPLE,1,12)) %>% 
+    .[match(colnames(otu_tcga_z_genus_cpm),.$SAMPLE),]
+  for (i in 1:ncol(otu_tcga_z_genus_cpm)) {
+    otu_tcga_z_genus_cpm[,i]<-otu_tcga_z_genus_cpm[,i]*10^6/as.numeric(reads_tcga$raw_reads)[i]
+  }
+  
+  
+  ## 2. TCGA_S 
+  otu_tcga_s_species_cpm <- otu_tcga_s_species_count
+  reads_tcga <- read.csv(file = './source_data/CancerLetters_Zhang/ACC.reads.stat.csv')%>% 
+    dplyr::rename('SAMPLE'='id') %>% 
+    dplyr::mutate(SAMPLE=str_sub(SAMPLE,1,12)) %>% 
+    .[match(colnames(otu_tcga_s_species_cpm),.$SAMPLE),]
+  for (i in 1:ncol(otu_tcga_s_species_cpm)) {
+    otu_tcga_s_species_cpm[,i]<-otu_tcga_s_species_cpm[,i]*10^6/as.numeric(reads_tcga$raw_reads)[i]
+  }
+  
+  otu_tcga_s_genus_cpm <- otu_tcga_s_genus_count
+  reads_tcga <- read.csv(file = './source_data/CancerLetters_Zhang/ACC.reads.stat.csv')%>% 
+    dplyr::rename('SAMPLE'='id') %>% 
+    dplyr::mutate(SAMPLE=str_sub(SAMPLE,1,12)) %>% 
+    .[match(colnames(otu_tcga_s_genus_cpm),.$SAMPLE),]
+  for (i in 1:ncol(otu_tcga_s_genus_cpm)) {
+    otu_tcga_s_genus_cpm[,i]<-otu_tcga_s_genus_cpm[,i]*10^6/as.numeric(reads_tcga$raw_reads)[i]
+  }
+  
+  
+  
+  ## 3. Huashan
+  otu_huashan_genus_cpm <- otu_huashan_genus_count
+  reads_huashan <- read.table(file = './source_data/Huashan/dada2_stats.tsv',sep = '\t',header = TRUE,check.names = FALSE)%>% 
+    dplyr::rename('SAMPLE'='sample-id') %>% 
+    dplyr::mutate(PATIENT_ID=clinic_huashan$PATIENT_ID[match(.$SAMPLE,clinic_huashan$SAMPLE)]) %>% 
+    .[match(colnames(otu_huashan_genus_cpm),.$PATIENT_ID),]
+  for (i in 1:ncol(otu_huashan_genus_cpm)) {
+    otu_huashan_genus_cpm[,i]<-otu_huashan_genus_cpm[,i]*10^6/as.numeric(reads_huashan$input)[i]
+  }
+  
+  # combine
+  otu_species_cpm_list <- list(otu_tcga_z_species_cpm,otu_tcga_s_species_cpm)
+  otu_genus_cpm_list <- list(otu_tcga_z_genus_cpm,otu_tcga_s_genus_cpm,otu_huashan_genus_cpm)
+  
+  write.xlsx(otu_species_cpm_list,'./00_data_preparation/otu_species_cpm_table.xlsx',rowNames=T,sheetName=c('TCGA_Z','TCGA_S'))
+  write.xlsx(otu_genus_cpm_list,'./00_data_preparation/otu_genus_cpm_table.xlsx',rowNames=T,sheetName=c('TCGA_Z','TCGA_S','HUASHAN'))
+  
+}
+```
+
+### The mRNA exp
+```{r, message=FALSE,warning=FALSE}
+if(TRUE){
+  
+  # TCGA-ACC
+  exp_tcga <- read.table(file = './source_data/UCSC_Xena/TCGA-ACC.htseq_tpm.tsv',header = TRUE,check.names = FALSE,row.names = 1)
+  exp_tcga <- log2(exp_tcga+1)
+  range(exp_tcga)
+  
+  exp_tcga <- exp_tcga[,clinic_tcga$PATIENT_ID]
+  
+  exp_list <- list(exp_tcga)
+  write.xlsx(exp_list,'./00_data_preparation/gene_table.xlsx',rowNames=T,sheetName=c('TCGA'))
+  
+}
+```
