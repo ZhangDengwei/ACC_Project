@@ -1,0 +1,292 @@
+---
+title: "06_cluster_and_genomic_events"
+author: "Yuqing Li"
+date: "2025-05-21"
+output: html_document
+---
+
+### Load requirements
+```{r, message=FALSE,warning=FALSE}
+{
+  library(maftools)
+  library(tidyr)
+  library(stringr)
+  library(ggpubr)
+  library(magrittr)
+  library(TCGAbiolinks)
+  library(data.table)
+  library(GenomicRanges)
+  library(biomaRt)
+  library(openxlsx)
+  library(ComplexHeatmap)
+  library(RColorBrewer)
+  library(circlize)
+  library(dplyr)
+  library(ggplot2)
+  library(ggpubr)
+  library(ggunchained)
+}
+
+
+df_meta_ACC_tcga <- read.csv("./00_data_preparation/metadata.csv",na.strings = "") %>% 
+  filter(COHORT=='TCGA')
+
+df_cluster_clinical <- read.csv("./clustering/whole/pam/Unsupervised_clustering.csv") %>% 
+  dplyr::select(c("PATIENT_ID", "genus_tcga_s_euclidean")) %>% 
+  setNames(c("PATIENT_ID", "MS")) %>% 
+  dplyr::mutate(MS=recode(.$MS,'1'="MS1",'2'="MS2")) %>% 
+  dplyr::mutate(MS = as.factor(MS)) %>% 
+  merge(., df_meta_ACC_tcga, by="PATIENT_ID", all = TRUE) %>% 
+  set_rownames(.$PATIENT_ID)
+```
+
+### Mutation and cnv landsccape between Microbial clustering
+```{r, message=FALSE,warning=FALSE}
+# load clinical annotation
+  clinicalData <- df_cluster_clinical[,c('MS','PATIENT_ID')] %>% 
+    set_colnames(c('MS','Tumor_Sample_Barcode'))
+  
+  # load mutation data
+  mut_data <- read.csv(file = './source_data/ACC_mutect2.csv',header = T,row.names = 1,check.names = F,fill = TRUE) %>% 
+    dplyr::mutate(Tumor_Sample_Barcode=str_sub(.$Tumor_Sample_Barcode,1,12)) %>% 
+    dplyr::filter(Tumor_Sample_Barcode%in% df_cluster_clinical$PATIENT_ID) 
+  features_mut <- c('TP53', 'CTNNB1', 'PRKAR1A', 'MEN1','RPL22')
+  
+  # load cnv data
+  interest_cytoband <- read.xlsx('./source_data/Cancer_cell_Verhaak/cytoband_cnv_tcga.xlsx',colNames = TRUE,rowNames = FALSE,check.names = F) %>% 
+    pivot_longer(cols = everything(), names_to = "Cytoband", values_to = "Gene") %>%
+    filter(Gene != "")  # 移除空值
+  cnv_data <- read.table(file = './source_data/TCGA-ACC.cnv.gistic.tsv',sep = '\t',header = T,check.names = F) %>% 
+    dplyr::filter(Symbol%in%interest_cytoband$Gene) %>% 
+    gather(.,key = 'PATIENT',value ='gistic_score',-1) %>% 
+    dplyr::mutate(CN=ifelse(.$gistic_score>0,'Amp',ifelse(.$gistic_score<0,'Del',NA))) %>% 
+    dplyr::select(-gistic_score) %>% 
+    na.omit() %>% 
+    plyr::rename(c('PATIENT'='Tumor_Sample_Barcode')) %>% 
+    .[.$Tumor_Sample_Barcode%in%df_cluster_clinical$PATIENT_ID,] %>% 
+    dplyr::mutate(cytoband=interest_cytoband$Cytoband[match(.$Symbol,interest_cytoband$Gene)]) %>% 
+    dplyr::mutate()
+  features_cnv <- unique(cnv_data$Symbol)
+  
+  # combine mut and cnv
+  mut.plus.cnv = read.maf(maf = mut_data,
+                          cnTable = cnv_data,
+                          clinicalData = clinicalData,
+                          verbose = F)
+  ms1_patient <- df_cluster_clinical$PATIENT_ID[df_cluster_clinical$MS=='MS1']
+  ms2_patient <- df_cluster_clinical$PATIENT_ID[df_cluster_clinical$MS=='MS2']
+  mut1 <- mut_data[mut_data$Tumor_Sample_Barcode%in%ms1_patient,] 
+  mut2 <- mut_data[mut_data$Tumor_Sample_Barcode%in%ms2_patient,] 
+  cnv1 <- cnv_data[cnv_data$Tumor_Sample_Barcode%in%ms1_patient,]
+  cnv2 <- cnv_data[cnv_data$Tumor_Sample_Barcode%in%ms2_patient,]
+  mut.plus.cnv1 = read.maf(maf = mut1,
+                           cnTable = cnv1,
+                           clinicalData = clinicalData,
+                           verbose = F)
+  mut.plus.cnv2 = read.maf(maf = mut2,
+                           cnTable = cnv2,
+                           clinicalData = clinicalData,
+                           verbose = F)
+  
+  features <- c(features_mut,features_cnv)
+  
+  
+  
+  # comparison of genes between MS1/2
+  pt.vs.rt <- mafCompare(m1 = mut.plus.cnv1, m2 = mut.plus.cnv2, m1Name = 'MS1', m2Name = 'MS2',minMut = 0) 
+  diff_mut_cnv_genes <- pt.vs.rt$results %>% 
+    as.data.frame() %>% 
+    dplyr::filter(Hugo_Symbol %in% features) %>%
+    dplyr::mutate(cytoband=interest_cytoband$Cytoband[match(.$Hugo_Symbol,interest_cytoband$Gene)])
+  # write.table(diff_mut_cnv_genes,file = paste0('./cluster_and_genomic_events/output_Diff_genes_of_mut_and_cnv(customed)_between_MS1_MS2_.tsv'),sep = '\t',row.names = F)
+  
+  # pdf('./cluster_and_genomic_events/treemap_of_enrichment_mut_and_cnv_ms1_and_ms2.pdf',width = 4,height = 4)
+  maftools::pathways(maf = mut.plus.cnv1, plotType = 'bar')
+  maftools::pathways(maf = mut.plus.cnv2, plotType = 'bar')
+  # dev.off()
+  
+  fab.ce = clinicalEnrichment(maf = mut.plus.cnv, clinicalFeature = 'MS')
+  # pdf('./cluster_and_genomic_events/comparison_result_between_ms1_and_ms2.pdf',width = 4,height = 4)
+  plotEnrichmentResults(enrich_res = fab.ce, pVal = 0.05, geneFontSize = 0.5, annoFontSize = 0.6)
+  # dev.off()
+```
+
+### Visualization by complexheatmap
+```{r, message=FALSE,warning=FALSE}
+fun_oncoplot_heatmap <- function(mat,clinic){
+  
+  # colors
+  vc_cols = RColorBrewer::brewer.pal(n = 10, name = 'Paired') 
+  vc_cols[9:10] <- c('#104E8B','#FF3030')
+  names(vc_cols) = c(
+    'Frame_Shift_Del',
+    'Missense_Mutation',
+    'Nonsense_Mutation',
+    'Multi_Hit',
+    'Frame_Shift_Ins',
+    'In_Frame_Ins',
+    'Splice_Site',
+    'In_Frame_Del',
+    'Del',
+    'Amp'
+  )
+  
+  col <- vc_cols
+  alter_fun <- list(
+    background = function(x, y, w, h) {
+      grid.rect(x, y, w-unit(0.5, "mm"), h-unit(0.5, "mm"), 
+                gp = gpar(fill = "#CCCCCC", col = NA))
+    },
+    # big blue
+    Nonsense_Mutation = function(x, y, w, h) {
+      grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+                gp = gpar(fill = col["Nonsense_Mutation"], col = NA))
+    },
+    # bug red
+    Missense_Mutation = function(x, y, w, h) {
+      grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+                gp = gpar(fill = col["Missense_Mutation"], col = NA))
+    },
+    # small green
+    Splice_Site = function(x, y, w, h) {
+      grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+                gp = gpar(fill = col["Splice_Site"], col = NA))
+    },
+    Frame_Shift_Del = function(x, y, w, h) {
+      grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+                gp = gpar(fill = col["Frame_Shift_Del"], col = NA))
+    },
+    Frame_Shift_Ins = function(x, y, w, h) {
+      grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+                gp = gpar(fill = col["Frame_Shift_Ins"], col = NA))
+    },
+    In_Frame_Del = function(x, y, w, h) {
+      grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+                gp = gpar(fill = col["In_Frame_Del"], col = NA))
+    },
+    Multi_Hit = function(x, y, w, h) {
+      grid.rect(x, y, w-unit(0.5, "mm"), h*0.33, 
+                gp = gpar(fill = col["Multi_Hit"], col = NA))
+    },
+    Amp = function(x, y, w, h) {
+      grid.rect(x, y, w-unit(0.5, "mm"), h-unit(0.5, "mm"), 
+                gp = gpar(fill = col["Amp"], col = NA))
+    },
+    Del = function(x, y, w, h) {
+      grid.rect(x, y, w-unit(0.5, "mm"),h-unit(0.5, "mm"), 
+                gp = gpar(fill = col["Del"], col = NA))
+    }
+  )
+  
+  # column
+  clinic <- clinic[order(clinic$MS),]  
+  mat <- mat[,clinic$PATIENT_ID]
+  
+  colomn_group <- c(rep('MS1',42),rep('MS2',35)) 
+  names(colomn_group) <- colnames(mat)
+  
+  # row
+  row_group <- c(rownames(mat)[1:5],cnv_data$cytoband[match(features_cnv,cnv_data$Symbol)])
+  names(row_group) <- rownames(mat)
+  row_group <- row_group[!is.na(names(row_group))]
+  
+  # top annotation
+  top_anno = HeatmapAnnotation(MS = clinic$MS,
+                               gap = unit(1, "mm"),
+                               col = list(MS = c("MS1" = "#0072B5CC", "MS2" = "#E18727CC")))
+  
+  # bottom annotation
+  bottom_anno <- HeatmapAnnotation(column_barplot = anno_oncoprint_barplot(height = unit(1,'cm'))) 
+  
+  # right annotation
+  result_chisq <- read.table(file = './cluster_and_genomic_events/output_Diff_genes_of_mut_and_cnv(customed)_between_MS1_MS2_.tsv',header = TRUE,sep = '\t') 
+  pval <- result_chisq$pval[match(rownames(mat),result_chisq$Hugo_Symbol)]
+  significance_group <- ifelse(pval < 0.05, "Significant", "Not Significant")
+  right_anno <- rowAnnotation(p_value = anno_barplot(-log10(pval)),
+                                  signif = significance_group,
+                                  col=list(signif=c("Significant" = "yellow", "Not Significant" = "#eaebea")))
+  
+  # plot heatmap
+  p <- oncoPrint(mat,
+                 alter_fun = alter_fun, 
+                 col = vc_cols, 
+                 column_title='77 ACC Samples',
+                 row_split = row_group,
+                 column_split = colomn_group,
+                 row_title_rot = 0,
+                 row_gap = unit(1, "mm"),
+                 show_pct = F,
+                 row_names_side = "left",
+                 row_order = 1:nrow(mat),
+                 column_order = 1:ncol(mat),
+                 top_annotation = top_anno,
+                 bottom_annotation =bottom_anno,
+                 right_annotation = right_anno,
+                 show_heatmap_legend=T,
+                 remove_empty_columns = F, 
+                 remove_empty_rows = F)
+  return(p)
+
+}
+
+mat <-read.table(file="./cluster_and_genomic_events/onco_matrix.txt",check.names = F,header = T, row.names = 1,stringsAsFactors = FALSE,sep = "\t")
+mat[mat==0]<-''
+mat1 <- mat[c('CDKN2A','ZNRF3'),]
+
+# pdf('./cluster_and_genomic_events/heatmap_genomics_ms1_ms2.pdf',width = 12,height = 18)
+fun_oncoplot_heatmap(mat,df_cluster_clinical)
+# dev.off()
+
+# pdf('./cluster_and_genomic_events/heatmap_genomics_ms1_ms2_customed.pdf',width = 12,height = 2)
+fun_oncoplot_heatmap(mat1,df_cluster_clinical)
+# dev.off()
+```
+
+### TMB and FGA between Microbial clustering
+```{r, message=FALSE,warning=FALSE}
+# TMB
+if(TRUE){
+  TMB = tmb(maf = read.maf(maf = mut_data), captureSize = 50, logScale = FALSE) %>% 
+    as.data.frame() %>% 
+    merge(.,df_cluster_clinical,by.x="Tumor_Sample_Barcode",by.y="PATIENT_ID")
+  
+  # pdf('./cluster_and_genomic_events/TMB_ms1_ms2.pdf',width = 3,height = 4)
+  ggplot(TMB, aes(x=MS, y=total_perMB,fill=MS)) +
+    geom_jitter(shape=16, color="grey",size=2.0,position=position_jitter(0.2))+
+    geom_violin()+
+    stat_summary(fun = mean,
+                 fun.min = function(x){quantile(x)[2]},
+                 fun.max = function(x){quantile(x)[4]},
+                 geom = "pointrange",
+                 size=0.5,
+                 position = position_dodge(width = 0.2))+
+    theme_bw()+
+    scale_fill_manual(values = c(MS1="#0072B5CC",MS2="#E18727CC"))+
+    guides(fill=guide_legend(direction = "horizontal",nrow =1,position = 'bottom'))+
+    labs(x="", y = "Tumor Muation Burden(Total_perMB)", fill = "")+  
+    stat_compare_means(method = "wilcox.test",label = "p.format",size=6)
+  # dev.off()
+}
+
+# Fraction Genome Altered(FGA)
+if(TRUE){
+  FGA <- dplyr::select(df_cluster_clinical,c(Fraction_Genome_Altered,MS)) 
+  # pdf('./cluster_and_genomic_events/FGA_ms1_ms2.pdf',width = 3,height = 4)
+  ggplot(FGA, aes(x=MS, y=Fraction_Genome_Altered,fill=MS)) +
+    geom_jitter(shape=16, color="grey",size=2.0,position=position_jitter(0.2))+
+    geom_violin()+
+    stat_summary(fun = mean,
+                 fun.min = function(x){quantile(x)[2]},
+                 fun.max = function(x){quantile(x)[4]},
+                 geom = "pointrange",
+                 size=0.5,
+                 position = position_dodge(width = 0.2))+
+    theme_bw()+
+    scale_fill_manual(values = c(MS1="#0072B5CC",MS2="#E18727CC"))+
+    guides(fill=guide_legend(direction = "horizontal",nrow =1,position = 'bottom'))+
+    labs(x="", y = "Fraction Genome Altered", fill = "")+  
+    stat_compare_means(method = "wilcox.test",label = "p.format",size=6)
+  # dev.off()
+}
+```
+
