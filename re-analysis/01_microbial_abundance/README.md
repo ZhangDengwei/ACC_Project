@@ -1,1 +1,1 @@
-The results relate to (R)Figures 2A, and (R)Figures S1.
+The results relate to (R)Figure 2A, and (R)Figure S1.
