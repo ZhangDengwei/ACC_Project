@@ -1,0 +1,156 @@
+---
+title: "01_microbial_abundance"
+author: "Yuqing Li"
+date: "2025-05-21"
+output: html_document
+---
+
+### Load requirements
+```{r, message=FALSE,warning=FALSE}
+{
+  library(reshape2)
+  library(ggsci)
+  library(magrittr)
+  library(dplyr)
+  library(openxlsx)
+  library(UpSetR)
+  library(ggplot2)
+}
+
+fun_matrix_transfer <- function(matrix,method=c('com','com_filter','clr','clr_filter')){
+  
+  # matrix :otu*sample
+  
+  matrix_com <- matrix %>% 
+    # dplyr::filter(rowSums(.) > 0) %>% 
+    select_if(~ sum(.) > 0) %>%
+    microbiome::transform("compositional") %>%   
+    t()  
+  
+  matrix_com_filter <- matrix_com %>% 
+    .[,colMeans(.> 0) > 0.05] %>%   
+    as.matrix()  
+  
+  if(method=='com'){
+    matrix_transfer <- matrix_com
+  }else if(method=='com_filter'){
+    matrix_transfer <- matrix_com_filter
+  }else if(method=='clr'){
+    matrix_clr <- matrix_com+1e-05
+    matrix_clr <- matrix_clr %>% 
+      compositions::clr() %>%  
+      as.matrix()
+    matrix_transfer <- matrix_clr
+  }else {
+    matrix_clr_filter <- matrix_com_filter+1e-05
+    matrix_clr_filter <- matrix_clr_filter %>% 
+      compositions::clr() %>%  
+      as.matrix()
+    matrix_transfer <- matrix_clr_filter
+  }
+  
+  return(matrix_transfer) #sample*otu
+  
+}
+```
+
+### Number of microbes
+```{r, message=FALSE,warning=FALSE}
+df_otu_genus_tcga_z <- read.xlsx('./00_data_preparation/otu_genus_count_table.xlsx',sheet = 1,rowNames = TRUE)  %>%  mutate(across(where(is.character), as.numeric)) %>% fun_matrix_transfer(.,method = 'com') %>% as.data.frame();dim(df_otu_genus_tcga_z)
+df_otu_genus_tcga_s <- read.xlsx('./00_data_preparation/otu_genus_count_table.xlsx',sheet = 2,rowNames = TRUE) %>% mutate(across(where(is.character), as.numeric))  %>% fun_matrix_transfer(.,method = 'com')%>% as.data.frame();dim(df_otu_genus_tcga_s)
+df_otu_species_tcga_z <- read.xlsx('./00_data_preparation/otu_species_count_table.xlsx',sheet = 1,rowNames = TRUE)  %>%  mutate(across(where(is.character), as.numeric)) %>% fun_matrix_transfer(.,method = 'com')%>% as.data.frame();dim(df_otu_species_tcga_z)
+df_otu_species_tcga_s <- read.xlsx('./00_data_preparation/otu_species_count_table.xlsx',sheet = 2,rowNames = TRUE) %>% mutate(across(where(is.character), as.numeric))  %>% fun_matrix_transfer(.,method = 'com')%>% as.data.frame();dim(df_otu_species_tcga_s)
+list_genus <- list(colnames(df_otu_genus_tcga_z),colnames(df_otu_genus_tcga_s))
+list_species <- list(colnames(df_otu_species_tcga_z),colnames(df_otu_species_tcga_s))
+names(list_genus) <- c('TCGA_Z','TCGA_S') 
+names(list_species) <- c('TCGA_Z','TCGA_S') 
+
+# pdf('./microbial_abundance/upset_comparison_TCGA_S_and_TCGA_Z.pdf',width = 6,height = 5)
+upset(fromList(list_genus), 
+      sets = c('TCGA_Z','TCGA_S') ,  
+      nsets=length(list_genus),
+      keep.order = TRUE, # 按照sets的顺序
+      mb.ratio = c(0.5, 0.5),
+      order.by = "freq",                
+      main.bar.color = "#BC3C29FF",    
+      set_size.show = TRUE,            
+      point.size = 3,                  
+      line.size = 1)     
+upset(fromList(list_species), 
+      sets = c('TCGA_Z','TCGA_S') ,  
+      nsets=length(list_species),
+      keep.order = TRUE, 
+      mb.ratio = c(0.5, 0.5),
+      order.by = "freq",              
+      main.bar.color = "#BC3C29FF",   
+      set_size.show = TRUE,            
+      point.size = 3,                
+      line.size = 1)  
+# dev.off()
+```
+### Relative abundance of microbes in TCGA_Z and TCGA_S
+```{r, message=FALSE,warning=FALSE}
+df_otu_genus_tcga_z <- read.xlsx('./00_data_preparation/otu_genus_count_table.xlsx',sheet = 1,rowNames = TRUE)  %>%  mutate(across(where(is.character), as.numeric)) %>% fun_matrix_transfer(.,method = 'com') %>% as.data.frame();dim(df_otu_genus_tcga_z)
+df_otu_genus_tcga_s <- read.xlsx('./00_data_preparation/otu_genus_count_table.xlsx',sheet = 2,rowNames = TRUE) %>% mutate(across(where(is.character), as.numeric))  %>% fun_matrix_transfer(.,method = 'com')%>% as.data.frame();dim(df_otu_genus_tcga_s)
+df_otu_species_tcga_z <- read.xlsx('./00_data_preparation/otu_species_count_table.xlsx',sheet = 1,rowNames = TRUE)  %>%  mutate(across(where(is.character), as.numeric)) %>% fun_matrix_transfer(.,method = 'com')%>% as.data.frame();dim(df_otu_species_tcga_z)
+df_otu_species_tcga_s <- read.xlsx('./00_data_preparation/otu_species_count_table.xlsx',sheet = 2,rowNames = TRUE) %>% mutate(across(where(is.character), as.numeric))  %>% fun_matrix_transfer(.,method = 'com')%>% as.data.frame();dim(df_otu_species_tcga_s)
+
+function_top <- function(in_matrix, identifier, top_no){
+  colsum <- colSums(in_matrix)
+  colsum <- colsum[order(colsum, decreasing = TRUE)]
+  top10 <- head(names(colsum), top_no)
+  df_top10 <- in_matrix[,top10]
+  df_others <- rowSums(in_matrix[,! names(in_matrix) %in% top10])
+  df_top10$Others <- df_others
+  df_top10$id <- rownames(df_top10)
+  df_top10_melt <- reshape2::melt(df_top10, id="id")
+  df_top10_melt[,"identifier"] <- identifier
+  return(df_top10_melt)
+}
+
+df_genus_tcga_z_top <- function_top(df_otu_genus_tcga_z, "TCGA_Z_genus", 5)
+df_genus_tcga_s_top <- function_top(df_otu_genus_tcga_s, "TCGA_S_genus", 5)
+df_species_tcga_z_top <- function_top(df_otu_species_tcga_z, "TCGA_Z_species", 5)
+df_species_tcga_s_top <- function_top(df_otu_species_tcga_s, "TCGA_S_species", 5)
+
+# df_order_genus_tcga_z <- doBy::summaryBy(value~variable, data=df_genus_tcga_z_top[,c("variable", "value")], FUN=sum) %>% 
+#   .[order(.$value.sum),]
+# df_order_genus_tcga_s <- doBy::summaryBy(value~variable, data=df_genus_tcga_s_top[,c("variable", "value")], FUN=sum) %>% 
+#   .[order(.$value.sum),]
+# df_order_species_tcga_z <- doBy::summaryBy(value~variable, data=df_species_tcga_z_top[,c("variable", "value")], FUN=sum) %>% 
+#   .[order(.$value.sum),]
+# df_order_species_tcga_s <- doBy::summaryBy(value~variable, data=df_species_tcga_s_top[,c("variable", "value")], FUN=sum) %>% 
+#   .[order(.$value.sum),]
+
+df_combine_genus <- rbind(df_genus_tcga_z_top, df_genus_tcga_s_top) %>% 
+  dplyr::mutate(identifier=factor(.$identifier,levels=c('TCGA_Z_genus','TCGA_S_genus')))
+df_combine_species <- rbind(df_species_tcga_z_top, df_species_tcga_s_top) %>% 
+  dplyr::mutate(identifier=factor(.$identifier,levels=c('TCGA_Z_species','TCGA_S_species')))
+
+df_order_genus <- doBy::summaryBy(value~variable, data=df_combine_genus[,c("variable", "value")], FUN=sum) %>% 
+  .[order(.$value.sum),]
+df_order_species <- doBy::summaryBy(value~variable, data=df_combine_species[,c("variable", "value")], FUN=sum) %>% 
+  .[order(.$value.sum),]
+
+df_combine_genus$variable <- factor(df_combine_genus$variable, levels = df_order_genus$variable)
+df_combine_species$variable <- factor(df_combine_species$variable, levels = df_order_species$variable)
+
+fun_top_plot <- function(df_combine){
+  p_top <- ggplot(df_combine, aes(x=id,  y=value)) + 
+    geom_area(aes(fill = variable, group = variable))+
+    facet_wrap(vars(identifier), nrow = 5) +
+    scale_fill_d3("category20")+
+    theme_bw()+
+    xlab("")+
+    ylab("Relative abundance")+
+    theme(axis.text.x = element_blank(),
+          axis.ticks.x = element_blank())
+  print(p_top)
+}
+
+# pdf('./microbial_abundance/Relative_abundance_different_levels_filter.pdf', width = 16,height = 4)
+fun_top_plot(df_combine_genus)
+fun_top_plot(df_combine_species)
+# dev.off()
+```
+
