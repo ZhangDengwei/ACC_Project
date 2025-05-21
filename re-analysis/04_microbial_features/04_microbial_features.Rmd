@@ -1,0 +1,541 @@
+---
+title: "04_mircobial_features"
+author: "Yuqing Li"
+date: "2025-05-21"
+output: html_document
+---
+
+### Load requirements
+```{r, message=FALSE,warning=FALSE}
+{
+  library(ggplot2)
+  library(dplyr)
+  library(Maaslin2)
+  library(tidyverse)
+  library(UpSetR)
+  library(stringr)
+  library(circlize)
+  library(ComplexHeatmap)
+  library(survival)
+  library(survminer)
+  library(ggthemes)
+  library(ggsci)
+  library(openxlsx)
+  library(rms)
+  library(openxlsx)
+  library(microbiome)
+  library(phyloseq)
+  library(pROC)
+  library(timeROC)
+  library(vegan)
+  library(ANCOMBC)
+  library(ggDCA)
+  library(ggrepel)
+  library(magrittr)
+}
+
+thm <- theme_bw()+
+  theme(panel.border = element_rect(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black",size=0.5),
+        text = element_text(size = 20),
+        axis.text.x = element_text(size=25,color ='black'),
+        axis.text.y = element_text(size = 20,color = 'black'),
+        axis.title.y = element_text(size = 20),
+        plot.subtitle  = element_text(face = 'italic',hjust = 0.5),
+        legend.position='bottom',
+        legend.text = element_text(size = 15,hjust = 0),
+        legend.title = element_text(size = 20)
+  )
+```
+
+### Load data
+```{r, message=FALSE,warning=FALSE}
+# load clinical data
+df_meta_acc_tcga <- read.csv("./00_data_preparation/metadata.csv",na.strings = "") %>% 
+  filter(COHORT=='TCGA') 
+df_clinical_cluster <- read.csv("./clustering/whole/pam/Unsupervised_clustering.csv") %>% 
+  dplyr::select(c("PATIENT_ID", "genus_tcga_s_euclidean")) %>% 
+  setNames(c("PATIENT_ID", "MS")) %>% 
+  dplyr::mutate(MS=recode(.$MS,'1'="MS1",'2'="MS2")) %>% 
+  dplyr::mutate(MS = as.factor(MS)) %>% 
+  merge(., df_meta_acc_tcga, by="PATIENT_ID", all = TRUE) %>% 
+  set_rownames(.$PATIENT_ID)
+
+
+# load microbial data
+fun_matrix_transfer <- function(matrix,method=c('com','com_filter','clr','clr_filter')){
+  
+  # matrix :otu*sample
+  
+  matrix_com <- matrix %>% 
+    select_if(~ sum(.) > 0) %>%
+    microbiome::transform("compositional") %>%   
+    t()  
+  
+  matrix_com_filter <- matrix_com %>% 
+    .[,colMeans(.> 0) > 0.05] %>%  
+    as.matrix()  
+  
+  if(method=='com'){
+    matrix_transfer <- matrix_com
+  }else if(method=='com_filter'){
+    matrix_transfer <- matrix_com_filter
+  }else if(method=='clr'){
+    matrix_clr <- matrix_com+1e-05
+    matrix_clr <- matrix_clr %>% 
+      compositions::clr() %>% 
+      as.matrix()
+    matrix_transfer <- matrix_clr
+  }else {
+    matrix_clr_filter <- matrix_com_filter+1e-05
+    matrix_clr_filter <- matrix_clr_filter %>% 
+      compositions::clr() %>% 
+      as.matrix()
+    matrix_transfer <- matrix_clr_filter
+  }
+  
+  return(matrix_transfer) #sample*otu
+  
+}
+
+df_count_1 <- read.xlsx('./00_data_preparation/otu_genus_count_table.xlsx',sheet = 1,rowNames = TRUE)  %>%  mutate(across(where(is.character), as.numeric))
+df_count_2 <- read.xlsx('./00_data_preparation/otu_genus_count_table.xlsx',sheet = 2,rowNames = TRUE) %>% mutate(across(where(is.character), as.numeric))
+df_cpm_1 <- read.xlsx('./00_data_preparation/otu_genus_cpm_table.xlsx',sheet = 1,rowNames = TRUE)  %>%  mutate(across(where(is.character), as.numeric)) %>%log1p() 
+df_cpm_2 <- read.xlsx('./00_data_preparation/otu_genus_cpm_table.xlsx',sheet = 2,rowNames = TRUE) %>% mutate(across(where(is.character), as.numeric)) %>%log1p()
+
+df_com_genus_tcga_z <- fun_matrix_transfer(df_count_1,method = 'com');dim(df_com_genus_tcga_z)
+df_com_genus_tcga_s <- fun_matrix_transfer(df_count_2,method = 'com');dim(df_com_genus_tcga_s)
+df_cpm_genus_tcga_z <- df_cpm_1 %>% t() %>% .[rownames(df_com_genus_tcga_z),colnames(df_com_genus_tcga_z)]
+df_cpm_genus_tcga_s <- df_cpm_2 %>% t() %>% .[rownames(df_com_genus_tcga_s),colnames(df_com_genus_tcga_s)]
+
+common_otu <- Reduce(intersect,list(colnames(df_com_genus_tcga_z),colnames(df_com_genus_tcga_s)))
+```
+
+### Examine the confounders impacting microbial community
+```{r, message=FALSE,warning=FALSE}
+function_adonis2 <- function(in_matrix, identifier){
+  df_all <- data.frame()
+  if(setequal(rownames(in_matrix),df_clinical$PATIENT_ID)){
+    dt <- in_matrix[df_clinical$PATIENT_ID,]
+  }else{
+    df_clinical <- df_clinical[match(rownames(in_matrix),df_clinical$PATIENT_ID),]
+    dt <- in_matrix[df_clinical$PATIENT_ID,]
+  }
+  
+  dt[dt<0] <- 0
+  print(identical(rownames(dt), df_clinical$PATIENT_ID))
+  set.seed(123)
+  for (confounder in confounders){
+    adonis_result <- adonis2(as.formula(paste("dt~",confounder, sep = "")),
+                             df_clinical, permutations = 999, distance = 'bray', na.action = na.omit)
+    df_all <- rbind(df_all, as.data.frame(adonis_result)[1,])
+  }
+  df_all$adj.P <- p.adjust(df_all[,"Pr(>F)"], method="BH")
+  df_all$identifier <- identifier
+  rownames(df_all) <- confounders
+  return(df_all)
+}
+
+df_clinical <- df_meta_acc_tcga %>% 
+  dplyr::mutate(AGE=ifelse(AGE>60,'>60','<60')) %>% 
+  dplyr::mutate(OS_Group1=ifelse(OS_Months>12,'LTS','STS')) %>% 
+  dplyr::mutate(OS_Group2=ifelse(OS_Months>36,'LTS','STS')) %>% 
+  dplyr::mutate(OS_Group3=ifelse(OS_Months>60,'LTS','STS')) %>% 
+  dplyr::mutate(PFS_Group1=ifelse(PFS_Months>12,'LTS','STS')) %>% 
+  dplyr::mutate(PFS_Group2=ifelse(PFS_Months>36,'LTS','STS')) %>% 
+  dplyr::mutate(PFS_Group3=ifelse(PFS_Months>60,'LTS','STS'))
+confounders <- c('SEX','AGE','RACE','STAGE','T_STAGE','N_STAGE','M_STAGE','NUCLEAR_GRADE_III_IV','TUMOR_STATUS','ATYPICAL_MITOTIC_FIGURES','CAPSULAR_INVASION','HISTORY_ADRENAL_HORMONE_EXCESS',
+                 'OS_Group1','OS_Group2','OS_Group3','PFS_Group1','PFS_Group2','PFS_Group3')
+
+df_confounder_tcga_z <- function_adonis2(df_com_genus_tcga_z, "TCGA_Z")
+df_confounder_tcga_s <- function_adonis2(df_com_genus_tcga_s, "TCGA_S")
+df_all_adonis <- rbind(df_confounder_tcga_z, df_confounder_tcga_s)
+# write.csv(df_all_adonis, file="./microbial_feature/Confounders_Impacting_Microbime.csv", row.names = TRUE)
+```
+
+### Differential genus analysis
+```{r, message=FALSE,warning=FALSE}
+# Differential genus between two groups using "Maaslin2"  
+function_Maaslin2 <- function(input_data, df_clinical_cluster,group, output_dir){
+  
+  input_data <- as.data.frame(input_data)
+  #  input_data： sample*otu
+  
+  if(setequal(rownames(input_data),rownames(df_clinical_cluster))){
+    input_data <- input_data[rownames(df_clinical_cluster), ]
+  }else{
+    patient_id <- intersect(rownames(input_data),rownames(df_clinical_cluster))
+    input_data <- input_data[patient_id,]
+    df_clinical_cluster <- df_clinical_cluster[patient_id,]
+  }
+  
+  fit_data = Maaslin2(
+    input_data = input_data,   
+    input_metadata = df_clinical_cluster,  
+    min_prevalence = 0,
+    analysis_method = "LM",
+    output = output_dir,   
+    fixed_effects = group,
+    cores = 6)
+  return(fit_data$results)
+}
+maaslin_s_group_tcga_s <- function_Maaslin2(df_cpm_genus_tcga_s,df_clinical_cluster, "MS", "microbial_feature/maaslin/maaslin_s_group_tcga_s")
+result_maaslin <- maaslin_s_group_tcga_s %>% dplyr::filter(pval<0.05)
+
+# Differential genus between two groups using "ANCOM"  
+function_ancom <- function(input_data,metadata,group){
+  
+  if(setequal(rownames(input_data),rownames(metadata))){
+    input_data <- input_data[rownames(metadata), ]
+  }else{
+    patient_id <- intersect(rownames(input_data),rownames(metadata))
+    input_data <- input_data[patient_id,]
+    metadata <- metadata[patient_id,]
+  }
+  
+  input_data <- t(input_data)
+  ancom_result = ancombc(data = input_data,  #sample*otu
+                         aggregate_data = NULL, 
+                         meta_data = metadata, 
+                         formula = group, 
+                         p_adj_method = "holm")
+  
+  return(ancom_result)
+}
+ancom_s_group_tcga_s <- function_ancom(df_cpm_genus_tcga_s,df_clinical_cluster,"MS")
+result_ancom <- (ancom_s_group_tcga_s$res)$p_val %>% dplyr::filter(MSMS2<0.05)
+
+# Combine
+fuction_feature <- function(df2, df3){
+
+  # result_wilcox <- df1 %>% tibble::rownames_to_column("feature") %>% dplyr::select(c("feature", "logFC", "P_value")) %>% set_colnames(c("feature", "coef1", "pval1"))
+  result_maaslin <- df2 %>% dplyr::select(c("feature", "coef", "pval")) %>% set_colnames(c("feature", "coef2", "pval2"))
+  result_ancom <- df3 %>% dplyr::select(c("taxon", "(Intercept)", "MSMS2")) %>% set_colnames(c("feature", "coef3", "pval3"))
+
+  df_combine <- Reduce(function(x,y){merge(x,y,by="feature",all=TRUE)},
+                       list(result_maaslin,result_ancom))
+  df_combine_feature <- df_combine %>% dplyr::select(c( "coef2","coef3"))
+  df_combine_feature[is.na(df_combine_feature)] <- 0
+  df_combine_feature[df_combine_feature!=0] <- 1
+
+  plot_upset <- upset(df_combine_feature,
+                      keep.order=TRUE, sets.x.label = "Number of differential microbes",
+                      queries=list(list(query = intersects, params = list("coef2","coef3"), color = "red",active = T)))
+  return(list(df_combine, plot_upset))
+}
+feature_s_group <- fuction_feature(result_maaslin,result_ancom)
+# pdf(file = "./microbial_feature/maaslin/Significantly_differential_microbes_Upset.pdf",height = 3,width = 6)
+feature_s_group[[2]]
+# dev.off()
+
+# common features that are invariably detected under different methods
+common_features <- Reduce(intersect,list(result_maaslin$feature,result_ancom$taxon,common_otu))
+common_features                    
+
+# volcano plot
+fun_diff_visual <- function(result_maaslin){
+  df_features <- na.omit(result_maaslin)
+  df_features$log.pval <- -log10(df_features$pval)
+  df_features <- df_features[order(df_features$coef), ]
+  df_features$class <- ifelse(df_features$coef < 0, "Enrich_MS1", ifelse(df_features$coef >0, "Enrich_MS2", "Not"))
+  df_features$class <- factor(df_features$class, levels = c("Enrich_MS1", "Enrich_MS2", "Not"))
+  df_features$common <- ifelse(df_features$feature%in%common_features,'Yes','No')
+  
+  p<- ggplot(data = df_features, aes(x=coef, y=log.pval, label = ifelse(common=='Yes', feature, ""),fill=class))+
+    geom_vline(xintercept = c(-1, 1), linetype="dotted", color = "red", size=1)+
+    geom_point(aes(colour=class)) +
+    scale_color_manual(values = c(Enrich_MS1="#0072B5CC", Enrich_MS2="#DF8F44FF",Not="#374E55FF"))+
+    theme_bw()+
+    scale_x_continuous(limits = c(-2.5, 2.5)) +
+    xlab("Coefficients")+
+    ylab("-Log10 p-value")
+    
+  print(p)
+}
+
+# pdf('./microbial_feature/volacano_plot_maaslin.pdf',width = 5,height = 4)
+fun_diff_visual(result_maaslin)
+# dev.off()
+
+# write_csv(result_maaslin, file = "./microbial_feature/Core_features_coefficients.csv")
+```
+
+### Construct the cox model
+```{r, message=FALSE,warning=FALSE}
+df_clinical_otu_tcga_s <- data.frame(df_cpm_genus_tcga_s) %>% 
+  tibble::rownames_to_column(var = 'PATIENT_ID') %>% 
+  merge(.,df_clinical_cluster,by='PATIENT_ID',all.x=TRUE)
+df_clinical_otu_tcga_z <- data.frame(df_cpm_genus_tcga_z) %>% 
+  tibble::rownames_to_column(var = 'PATIENT_ID') %>% 
+  merge(.,df_clinical_cluster,by='PATIENT_ID',all.x=TRUE)
+
+# cox model construction
+set.seed(123)
+cox_model <- coxph(Surv(OS_Months, OS_Status) ~ ., 
+                   data = dplyr::select(df_clinical_otu_tcga_s,c('OS_Months','OS_Status',common_features)))
+set.seed(123)
+step_cox <- step(cox_model ,direction = "both",trace = FALSE) 
+cox_summary <- summary(step_cox);cox_summary
+coxGene=row.names(cox_summary$coefficients)
+core_features <- coxGene;core_features
+
+# barplot showing the HR of each features in the cox model
+cox_results <- data.frame(
+  Otu = rownames(cox_summary$coefficients),
+  HR = cox_summary$coefficients[, "exp(coef)"],  
+  logHR = log(cox_summary$coefficients[, "exp(coef)"]), 
+  p_value = cox_summary$coefficients[, "Pr(>|z|)"]) %>% 
+  dplyr::mutate(label=case_when(p_value < 0.001 ~ "***",p_value < 0.01 ~ "**",p_value < 0.05 ~ "*",TRUE ~ "" ))
+
+# pdf('./microbial_feature/barplot_core_feature.pdf',width = 4,height = 3.5)
+ggplot(cox_results, aes(x = reorder(Otu, logHR), y = logHR, fill = logHR > 0)) +
+  geom_col()+
+  coord_flip() +  
+  scale_fill_manual(values = c("#0072B5CC","#E18727CC")) +  
+  theme_bw() +
+  labs(
+    title = "Cox Regression: Gene Log(HR)",
+    x = "Gene",
+    y = "log(HR)"
+  ) +
+  theme(panel.border = element_rect(colour = "black",size = 1),
+        axis.text.x = element_text(color ='black'),
+        axis.text.y = element_text(color ='black'),
+        aspect.ratio = 1 )
+# dev.off()
+```
+
+### Stratify patients based on the abundance of significant microbes
+```{r, message=FALSE,warning=FALSE}
+core_features
+function_ex_sur <- function(in_matrix){
+  df_cox_OS <- data.frame()
+  df_cox_PFS <- data.frame()
+  list_OS <- list()
+  list_PFS <- list()
+  
+  for (i in 1:length(core_features)){
+    genus <- core_features[i]
+    
+    if (genus %in% colnames(in_matrix)){
+      df_s <- in_matrix[,core_features[i], drop=FALSE] %>% as.data.frame()
+      
+      if(all(df_s[,genus]==0)){
+        list_OS[[i]] <- NULL
+        list_PFS[[i]] <- NULL
+      }else{
+        df_s$taxa <- df_s[,genus]
+        df_s$taxa_abun <- df_s[,genus]
+        df_s$abundance <- ifelse(df_s[,1]>median(df_s[,1]), "high", "low")
+        df_s$PATIENT_ID <- rownames(df_s)
+        
+        df_meta_ACC_m <- merge(df_meta_acc_tcga[, c("PATIENT_ID", "OS_Months", "OS_Status",'PFS_Months', 'PFS_Status')], df_s, by="PATIENT_ID")
+        
+        # survival plot
+        res.cut1 <- surv_cutpoint(df_meta_ACC_m, 
+                                  time = "OS_Months",
+                                  event = "OS_Status",
+                                  minprop = 0.01,
+                                  variables = 'taxa')
+        dat1 <- data.frame(surv_categorize(res.cut1))
+        fit1 <- survfit(Surv(OS_Months, OS_Status) ~ taxa, data = dat1)
+        p1 <- ggsurvplot(fit1,
+                         data = dat1,
+                         conf.int = TRUE,
+                         pval = TRUE,
+                         palette = c("#0072B5CC","#E18727CC"),
+                         xlab = "Time (Months)",
+                         legend = "right",
+                         legend.title = "",
+                         ggtheme = theme_base(),
+                         break.x.by = 40)+
+          ggtitle(paste0('OS_',str_extract(genus, "g__.+")))
+        
+        
+        res.cut2 <- surv_cutpoint(df_meta_ACC_m,
+                                  time = "PFS_Months",
+                                  event = "PFS_Status",
+                                  minprop = 0.01,
+                                  variables = 'taxa') 
+        dat2 <- data.frame(surv_categorize(res.cut2))
+        fit2 <- survfit(Surv(PFS_Months, PFS_Status) ~ taxa, data = dat2)
+        p2 <- ggsurvplot(fit2,
+                         data = dat2,
+                         conf.int = TRUE,
+                         pval = TRUE,
+                         palette = c("#0072B5CC","#E18727CC"),
+                         xlab = "Time (Months)",
+                         legend = "right",
+                         legend.title = "",
+                         ggtheme = theme_base(),
+                         break.x.by = 40)+
+          ggtitle(paste0('PFS_',str_extract(genus, "g__.+")))
+        
+        list_OS[[i]] <- p1
+        list_PFS[[i]] <- p2
+        
+        # cox analysis
+        res.cox1 <- coxph(Surv(OS_Months, OS_Status) ~ taxa_abun, data = df_meta_ACC_m) 
+        cox1 <- summary(res.cox1)
+        df_hr1 <- cox1$coefficients %>% as.data.frame()
+        rownames(df_hr1) <- genus
+        df_cox_OS <- rbind(df_cox_OS, df_hr1)
+        
+        res.cox2 <- coxph(Surv(PFS_Months, PFS_Status) ~ taxa_abun, data = df_meta_ACC_m) 
+        cox2 <- summary(res.cox2)
+        df_hr2 <- cox2$coefficients %>% as.data.frame()
+        rownames(df_hr2) <- genus
+        df_cox_PFS <- rbind(df_cox_PFS, df_hr2)
+      }
+      
+    }
+  }
+  return(list(list_OS,list_PFS, df_cox_OS,df_cox_PFS))
+}
+
+p_cpm_tcga_s<- function_ex_sur(df_cpm_genus_tcga_s)
+p_cpm_tcga_z<- function_ex_sur(df_cpm_genus_tcga_z)
+
+# pdf(file = "./microbial_feature/Biomarker_survial_examination_cpm_tcga_s.pdf",height = 4,width = 5)
+p_cpm_tcga_s[[1]]
+# dev.off()
+
+# pdf(file = "./microbial_feature/Biomarker_survial_examination_cpm_tcga_z.pdf",height = 4,width = 5)
+p_cpm_tcga_z[[1]]
+# dev.off()
+```
+
+### AUC
+```{r, message=FALSE,warning=FALSE}
+fun_auc <- function(df_clinical_otu){
+  
+  # AUC curve
+  df_clinical_otu$riskScore <- predict(step_cox, type = "risk", newdata = df_clinical_otu)
+  df_clinical_otu$riskScore <- log1p(df_clinical_otu$riskScore)
+  
+  roc.list <- roc(OS_Status ~ riskScore,
+                  smooth=T,
+                  data = df_clinical_otu)
+  
+  # pdf("./microbial_feature/AUC_Curves_tcga_s.pdf",width = 4,height = 4)
+  p1 <- ggroc(roc.list,linetype = 1, size = 1.2,color="#BC3C29FF") +
+    geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1),
+                 color="black", linetype="dashed")+
+    theme_bw() +
+    labs(title = 'AUC Curve TCGA_S')+
+    theme(panel.grid.major = element_blank(),
+          panel.border = element_rect(fill=NA,color="black", size=1.2, linetype="solid"))+
+    labs(title = 'ROC Curve')+
+    annotate("text", x = 0.2, y = 0.1, label = paste("AUC =", round(auc(roc.list), 3)), 
+             size = 5, color = "black") +
+    thm
+  
+  # timeROC
+  time_points <- quantile(df_clinical_otu$OS_Months,probs=seq(0.1,0.9,0.05))
+  cox1 <- coxph(Surv(OS_Months,OS_Status)~STAGE,data=df_clinical_otu)
+  df_clinical_otu$prediction1 <- predict(cox1)
+  ROC1 <- timeROC(T=df_clinical_otu$OS_Months,
+                  delta=df_clinical_otu$OS_Status,
+                  marker=df_clinical_otu$prediction1,
+                  iid = T,
+                  cause=1,
+                  weighting="marginal",
+                  times=time_points)
+  aic1 <- AIC(cox1)
+  
+  cox2 <- coxph(Surv(OS_Months,OS_Status)~STAGE+riskScore,data=df_clinical_otu)
+  df_clinical_otu$prediction2 <- predict(cox2)
+  ROC2 <- timeROC(T=df_clinical_otu$OS_Months,
+                  delta=df_clinical_otu$OS_Status,
+                  marker=df_clinical_otu$prediction2,
+                  iid = T,
+                  cause=1,
+                  weighting="marginal",
+                  times=time_points)
+  aic2 <- AIC(cox2)
+  
+  outcome <- timeROC::compare(ROC2,ROC1,adjusted = T,abseps = 1e-06)
+  pval_table <- as.data.frame(outcome$p_values_AUC)
+  
+  auc_data1 <- data.frame(Time = time_points, AUC = ROC1$AUC) %>% dplyr::mutate(group='STAGE')
+  auc_data2 <- data.frame(Time = time_points, AUC = ROC2$AUC) %>% dplyr::mutate(group='STAGE_MRS')
+  auc_data <- rbind(auc_data1,auc_data2)
+  p2 <- ggplot(auc_data, aes(x = Time, y = AUC,color=group)) +
+    geom_line(size = 1.2) +  
+    theme_bw() +
+    scale_color_manual(values = c(STAGE="#0072B5CC",STAGE_MRS="#E18727CC"))+
+    labs( title = "Time-Dependent AUC Curve",x = "Time (Months)",y = "AUC") +
+    ylim(0.5, 1)+  
+    thm
+  
+  # density curve of risk score and OS status
+  p3 <- ggplot(df_clinical_otu, aes(x = riskScore, fill = factor(OS_Status))) +
+    geom_density(alpha = 0.5) +
+    scale_fill_manual(values = c(`1`="#0072B5CC",`0`="#E18727CC"))+
+    labs(x = "Microbial risk Score", y = "Density", fill = "OS Status") +
+    theme_bw()+
+    thm
+  
+  return(list(p1,p2,p3,pval_table,aic1,aic2))
+  
+}
+
+auc_tcga_s <- fun_auc(df_clinical_otu_tcga_s)
+auc_tcga_z <- fun_auc(df_clinical_otu_tcga_z)
+
+# pdf(file = "./microbial_feature/AUC_tcga_s.pdf",height = 5,width = 4.5)
+print(auc_tcga_s[[1]])
+print(auc_tcga_s[[2]])
+# dev.off()
+
+# pdf(file = "./microbial_feature/MRS_density_tcga_s.pdf",height = 5,width = 4.5)
+print(auc_tcga_s[[3]])
+# dev.off()
+
+# pdf(file = "./microbial_feature/AUC_tcga_z.pdf",height = 5,width = 4.5)
+print(auc_tcga_z[[1]])
+print(auc_tcga_z[[2]])
+# dev.off()
+
+# pdf(file = "./microbial_feature/MRS_density_tcga_z.pdf",height = 5,width = 4.5)
+print(auc_tcga_z[[3]])
+# dev.off()
+
+auc_tcga_s[[5]];auc_tcga_s[[6]]
+auc_tcga_z[[5]];auc_tcga_z[[6]]
+
+auc_tcga_s[[4]]
+auc_tcga_z[[4]]
+```
+
+### DCA curves
+```{r, message=FALSE,warning=FALSE}
+df_clinical_otu_tcga_s$riskScore <- predict(step_cox, type = "risk", newdata = df_clinical_otu_tcga_s)
+df_clinical_otu_tcga_s$riskScore <- log1p(df_clinical_otu_tcga_s$riskScore)
+data_1 <- df_clinical_otu_tcga_s %>%  dplyr::select(c('riskScore','OS_Months','OS_Status','STAGE'))
+dd_1 <- rms::datadist(data_1)   
+options(datadist = dd_1)
+fit1 <- rms::cph(Surv(OS_Months, OS_Status) ~ STAGE, data = data_1, x = TRUE, y = TRUE, surv = TRUE)
+fit2 <- rms::cph(Surv(OS_Months, OS_Status) ~ STAGE + riskScore, data = data_1, x = TRUE, y = TRUE, surv = TRUE)
+dca_cph <- dca(fit1, fit2, model.names = c("STAGE", "STAGE+MRS"),times=c(12,24,36,48,60))
+
+# pdf(file = "./microbial_feature/DCA_tcga_s.pdf",height = 5,width = 12)
+ggplot(dca_cph, lwd = 1)+theme_few()+scale_color_jama()+thm
+# dev.off()
+options(datadist = NULL) 
+
+df_clinical_otu_tcga_z$riskScore <- predict(step_cox, type = "risk", newdata = df_clinical_otu_tcga_z)
+df_clinical_otu_tcga_z$riskScore <- log1p(df_clinical_otu_tcga_z$riskScore)
+data_2 <- df_clinical_otu_tcga_z %>%  dplyr::select(c('riskScore','OS_Months','OS_Status','STAGE'))
+dd_2 <- rms::datadist(data_2) 
+options(datadist = dd_2)
+fit1 <- rms::cph(Surv(OS_Months, OS_Status) ~ STAGE, data = data_2, x = TRUE, y = TRUE, surv = TRUE)
+fit2 <- rms::cph(Surv(OS_Months, OS_Status) ~ STAGE + riskScore, data = data_2, x = TRUE, y = TRUE, surv = TRUE)
+dca_cph <- dca(fit1, fit2, model.names = c("STAGE", "STAGE+MRS"),times=c(12,24,36,48,60))
+
+# pdf(file = "./microbial_feature/DCA_tcga_z.pdf",height = 5,width = 12)
+ggplot(dca_cph, lwd = 1)+theme_few()+scale_color_jama()+thm
+# dev.off()
+```
+
