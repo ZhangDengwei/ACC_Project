@@ -1,0 +1,114 @@
+rm(list = ls())
+getwd()
+
+{
+  library(ggplot2)
+  library(dplyr)
+  library(tidyverse)
+  library(ggthemes)
+  library(ggpubr)
+  library(vegan)
+  library(UpSetR)
+  library(ggsci)
+  library(readxl)
+}
+
+
+# input microbial matrix
+fun_matrix_transfer <- function(matrix,method=c('com','com_filter','clr','clr_filter')){
+  
+  # matrix :otu*sample
+  
+  matrix_com <- matrix %>% 
+    # dplyr::filter(rowSums(.) > 0) %>% 
+    select_if(~ sum(.) > 0) %>%
+    microbiome::transform("compositional") %>%   #compositional要求输入otu*sample
+    t()  # 输出为sample*otu
+  
+  matrix_com_filter <- matrix_com %>% 
+    .[,colMeans(.> 0) > 0.05] %>%   # 丰度筛选taxa
+    as.matrix()  # 输出为sample*otu
+  
+  if(method=='com'){
+    matrix_transfer <- matrix_com
+  }else if(method=='com_filter'){
+    matrix_transfer <- matrix_com_filter
+  }else if(method=='clr'){
+    matrix_clr <- matrix_com+1e-05
+    matrix_clr <- matrix_clr %>% 
+      compositions::clr() %>%  #要求输入sample*otu
+      as.matrix()
+    matrix_transfer <- matrix_clr
+  }else {
+    matrix_clr_filter <- matrix_com_filter+1e-05
+    matrix_clr_filter <- matrix_clr_filter %>% 
+      compositions::clr() %>%  #要求输入sample*otu
+      as.matrix()
+    matrix_transfer <- matrix_clr_filter
+  }
+  
+  return(matrix_transfer) #sample*otu
+  
+}
+
+df_otu_genus_acc_tcga_z <- read.csv('./source_data/ACC_table_gz/ACC_otutable_bacteria_genus.csv',header = TRUE,row.names = 1) %>% dplyr::select(-cancertype) %>% mutate(across(where(is.character), as.numeric)) %>% t() %>% as.data.frame() %>% fun_matrix_transfer(.,method = 'com');dim(df_otu_genus_acc_tcga_z)
+df_otu_genus_pcpg_tcga_z <- read.csv('./source_data/PCPG_table_gz/PCPG_otutable_bacteria_genus.csv',header = TRUE,row.names = 1) %>% dplyr::select(-cancertype) %>% mutate(across(where(is.character), as.numeric)) %>% t() %>% as.data.frame() %>% fun_matrix_transfer(.,method = 'com');dim(df_otu_genus_pcpg_tcga_z)
+df_otu_species_acc_tcga_z <- read.csv('./source_data/ACC_table_gz/ACC_otutable_bacteria_species.csv',header = TRUE,row.names = 1) %>% dplyr::select(-cancertype) %>% mutate(across(where(is.character), as.numeric)) %>% t() %>% as.data.frame() %>% fun_matrix_transfer(.,method = 'com');dim(df_otu_species_acc_tcga_z)
+df_otu_species_pcpg_tcga_z <- read.csv('./source_data/PCPG_table_gz/PCPG_otutable_bacteria_species.csv',header = TRUE,row.names = 1) %>% dplyr::select(-cancertype) %>% mutate(across(where(is.character), as.numeric)) %>% t() %>% as.data.frame() %>% fun_matrix_transfer(.,method = 'com');dim(df_otu_species_pcpg_tcga_z)
+
+df_otu_genus_acc_and_pcpg_tcga_z <- rbind(df_otu_genus_acc_tcga_z,df_otu_genus_pcpg_tcga_z)
+df_otu_species_acc_and_pcpg_tcga_z <- rbind(df_otu_species_acc_tcga_z,df_otu_species_pcpg_tcga_z)
+metadata <- data.frame(PATIENT_ID=rownames(df_otu_genus_acc_and_pcpg_tcga_z),type=c(rep('ACC',78),rep('PCPG',182)))
+
+function_PcoA <- function(in_matrix, title){
+  distance <- vegdist(in_matrix, method = 'bray')
+  pcoa <- cmdscale(distance, k = (nrow(in_matrix) - 1), eig = TRUE)
+  point <- data.frame(pcoa$point)
+  pcoa_eig <- (pcoa$eig)[1:2] / sum(pcoa$eig)
+  
+  # extract first two coordinate value
+  sample_eig <- data.frame({pcoa$point})[1:2]
+  sample_eig$PATIENT_ID <- rownames(sample_eig)
+  names(sample_eig)[1:2] <- c('PCoA1', 'PCoA2')
+  group_m <- merge(sample_eig, metadata[,c("PATIENT_ID", 'type')], by = "PATIENT_ID", all.x = TRUE)
+  
+  # PERMANOVA
+  dt <- in_matrix[group_m$PATIENT_ID,]
+  print(identical(rownames(dt), group_m$PATIENT_ID))
+  
+  group_m[,'type'] <- as.factor(group_m[,'type'])
+  set.seed(555)
+  adonis_result <- adonis2(as.formula(paste("dt~", 'type', sep = "")), group_m, permutations = 999, distance = 'bray')
+  
+  R2 <- round(adonis_result$R2[1], 2)
+  pvalue <- round(adonis_result$`Pr(>F)`[1], 2)
+  plot <- ggscatter(group_m, x= "PCoA1", y = "PCoA2",color='type',
+                    ellipse = TRUE,
+                    mean.point = TRUE, star.plot = TRUE,
+                    ellipse.level = 0.95,
+                    ggtheme = theme_minimal()) +
+    labs(x = paste('PCoA1: ', round(100 * pcoa_eig[1], 2), '%'),
+         y = paste('PCoA2: ', round(100 * pcoa_eig[2], 2), '%'))+
+    theme_classic()+
+    scale_color_manual(values = c("#0072B5CC","#E18727CC",'grey'))+
+    geom_vline(xintercept = 0, color = 'gray', size = 0.4) + 
+    geom_hline(yintercept = 0, color = 'gray', size = 0.4) +
+    theme(panel.grid = element_line(color = 'black', linetype = 2, size = 0.1), 
+          panel.background = element_rect(color = 'black', fill = 'transparent'), 
+          legend.title=element_blank())+
+    theme(axis.title = element_text(size = 18, colour="black"),
+          axis.text = element_text(size = 16, colour = "black"),
+          legend.text = element_text(size = 16))+
+    annotate("text", x = -Inf, y = Inf, label = paste("\n"," PERMANOVA R2 = ",R2 ,"\n"," P ", ifelse(pvalue<0.001,'<0.001',paste0('=',pvalue)), sep = ""), hjust = 0, vjust = 1) +
+    # geom_text(x=min(group_m$PCoA1), y=max(group_m$PCoA2),hjust = 0, vjust = 1, label=paste("PERMANOVA R2 = ",R2 ,"\n","P ", ifelse(pvalue<0.001,'<0.001',paste0('=',pvalue)), sep = ""))+
+    ggtitle(title)
+  return(plot)
+}
+
+p_genus_tcga_z <- function_PcoA(df_otu_genus_acc_and_pcpg_tcga_z,  "TCGA_Z_genus")
+p_species_tcga_z <- function_PcoA(df_otu_species_acc_and_pcpg_tcga_z, "TCGA_Z_species")
+
+# pdf(file = "./comparison_ACC_and_PCPG/Comparison_pcoa_acc_pcpg_TCGA_Z.pdf", width = 5, height = 4)
+print(p_genus_tcga_z)
+print(p_species_tcga_z)
+# dev.off()
